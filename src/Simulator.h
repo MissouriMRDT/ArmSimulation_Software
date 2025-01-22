@@ -1,5 +1,5 @@
-#ifndef IK_H
-#define IK_H
+#ifndef SIMULATOR_H
+#define SIMULATOR_H
 
 #include <math.h>
 #include "raylib.h"
@@ -12,17 +12,7 @@
 #define SPD_MOD2 2.0f
 #define SPD_MOD4 4.0f
 
-#define WRIST_RAD 2.887499685
-#define SHOULDER_LENGTH 7.328739921
-#define VALK_LENGTH 6.24943834646
-
-#define J4_FWD_LIM 90
-#define J4_REV_LIM -260
-
-#define INTOPIXELS 12.7
-#define PIXELSTOIN (1/12.7)
-
-class IK {
+class Simulator {
     private:
 
         Vector WristPos;
@@ -58,15 +48,15 @@ class IK {
         int buttonInput;
 
     public:
-        IK() {
+        Simulator() {
             WristPos = {0, 0, 0};
             GripperPos = {0, 0, 0};
-            wrist = {0,0,0};
+            wrist = {0, 0, 0};
 
             J1 = {0, 0, J1_FWD_LIM, J1_REV_LIM, 1};
             J2 = {60, 0, J2_FWD_LIM, J2_REV_LIM, 2};
             J3 = {-100, 0, J3_POS_LIM, J3_NEG_LIM, 3};
-            J4 = {90, 0, J4_FWD_LIM, J4_REV_LIM, 4};
+            J4 = {0, 0, J4_FWD_LIM, J4_REV_LIM, 4};
             Pitch = {30, 0, PITCH_FWD_LIM, PITCH_REV_LIM, 5};
             Valkyrie = {0, 0, 1000, -1000, 6};
  
@@ -97,4 +87,4 @@ class IK {
         void UpdateRayLibMatrix(joint &J);
 };
 
-#endif
+#endif /*SIMULATOR_H*/

@@ -20,5 +20,6 @@ TransfMatrix Rotate(float x, float y, float z);
 TransfMatrix Translate(float x, float y, float z);
 TransfMatrix operator * (const TransfMatrix& left, const TransfMatrix& right);
 Vector operator * (Vector v, TransfMatrix mat);
+void operator *= (Vector &v, float n);
 
 #endif /*ROVE_MATRIX_H*/

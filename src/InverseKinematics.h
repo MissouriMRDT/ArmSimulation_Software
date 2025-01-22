@@ -23,8 +23,19 @@
 #define PITCH_FWD_LIM 350
 #define PITCH_REV_LIM 10
 
+#define J4_FWD_LIM 350
+#define J4_REV_LIM 0
+
+#define WRIST_RAD 2.887499685
+#define SHOULDER_LENGTH 7.328739921
+#define VALK_LENGTH 6.24943834646
+
+#define INTOPIXELS 12.7
+#define PIXELSTOIN (1/12.7)
+
 //If returns false, calculated angle targets are outside of range. HoldCurrentPosition() can then be called
-bool CalculateInverseKinematics(Vector pos, float wristPitch, float wristValkyrie, float &q1, float &q2, float &q3, float &q4, float &qP, float &qV, float &J3FwdLim, float &J3RevLim);
+//Input angles are in degrees
+bool CalculateInverseKinematics(TransfMatrix valkTransf, Vector &pos, Vector &gripperPos, float wristJ4, float wristPitch, float wristValkyrie, float &q1, float &q2, float &q3, float &q4, float &qP, float &qV, float &J3FwdLim, float &J3RevLim, bool lockMode);
 bool isOutsideTargetRange(float fwdLim, float revLim, float angle);
 
 #endif /*INVERSE_KINEMATICS_H*/

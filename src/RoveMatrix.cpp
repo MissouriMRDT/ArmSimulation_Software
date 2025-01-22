@@ -74,3 +74,10 @@ Vector operator * (Vector v, TransfMatrix mat)
 
     return result;
 }
+
+void operator *= (Vector &v, float n)
+{
+    v.x *= n;
+    v.y *= n;
+    v.z *= n;
+}

@@ -1,4 +1,4 @@
-#include "IK.h"
+#include "Simulator.h"
 
 int main ()
 {
@@ -15,23 +15,23 @@ int main ()
 	camera.projection = CAMERA_PERSPECTIVE;
 	DisableCursor();
 
-	IK ik;
+	Simulator sim;
 	
 	while (!WindowShouldClose())
 	{
 		UpdateCamera(&camera, CAMERA_FREE);
 		ClearBackground(WHITE);
 
-		ik.TransformArm();
-		ik.Keyboard();
-		ik.Update();
+		sim.TransformArm();
+		sim.Keyboard();
+		sim.Update();
 
 		BeginDrawing();
 		BeginMode3D(camera);
-		ik.Draw();
+		sim.Draw();
 	}
 
-	ik.Unload();
+	sim.Unload();
 	CloseWindow();
 	return 0;
 }
@@ -51,4 +51,5 @@ TODO:
 
 	Make emb software updated
 	Make own vector struct instead
+	Fix limits to be like real arm
 */

@@ -1,6 +1,6 @@
-#include "IK.h"
+#include "Simulator.h"
 
-void IK::Draw() 
+void Simulator::Draw() 
 {
 	DrawModel(J2.model, (Vector3){0.0f, 0.0f, 0.0f }, 1.0f, RED);		
 	DrawModel(J3.model, (Vector3){0, 0, 0}, 1.0f, BLUE);
@@ -18,19 +18,20 @@ void IK::Draw()
 	if (currentMode == OPEN_LOOP) DrawText("O", 150,700,20,BLACK);
 	else if (currentMode == CLOSED_LOOP) DrawText("C", 150,700,20,BLACK);
 	else DrawText("IK", 150,700,20,BLACK);
+	if (lockMode) DrawText("LOCK", 80,700,20,BLACK);
 	DrawText("X: ", 5,650,20,BLACK);
 	DrawText(TextFormat("%.2f", WristPos.x), 40,650,20,BLACK);
 	DrawText("Y: ", 150,650,20,BLACK);
 	DrawText(TextFormat("%.2f", WristPos.y), 190,650,20,BLACK);
-	DrawText("PT: ", 5,600,20,BLACK);
-	DrawText(TextFormat("%.2f", Pitch.qTarget), 60,600,20,BLACK);
+	DrawText("P: ", 5,600,20,BLACK);
+	DrawText(TextFormat("%.2f", Pitch.qMotor), 60,600,20,BLACK);
 	// DrawText("Valkyriet: ", 150,600,20,BLACK);
 	// DrawText(TextFormat("%.2f", RAD2DEG*Valkyrie.qTarget), 210,600,20,BLACK);
 
 	EndDrawing();
 }
 
-void IK::Unload() 
+void Simulator::Unload() 
 {
 	UnloadModel(J2.model);
 	UnloadModel(J3.model);
@@ -40,11 +41,11 @@ void IK::Unload()
 	UnloadModel(Solenoid.model);
 }
 
-void IK::TransformArm() 
+void Simulator::TransformArm() 
 {
 	J2.transf = Rotate(0,0, -J2.qMotor*DEG2RAD) * Translate(0,0, INTOPIXELS*J1.qMotor);
 	J3.transf = Rotate(0, 0, -J3.qMotor*DEG2RAD) * Translate(-J2_LENGTH*INTOPIXELS, 0, 0) * J2.transf;
-	J4.transf = Rotate((-J4.qMotor+90)*DEG2RAD, 0,0) * Translate(-SHOULDER_LENGTH*INTOPIXELS, 0, 0) * J3.transf;
+	J4.transf = Rotate((-J4.qMotor)*DEG2RAD, 0,0) * Translate(-SHOULDER_LENGTH*INTOPIXELS, 0, 0) * J3.transf;
 	Pitch.transf = Rotate(0,0, -Pitch.qMotor*DEG2RAD) * Translate(-(J3_LENGTH-SHOULDER_LENGTH)*INTOPIXELS, 0, 0) * J4.transf;
 	Valkyrie.transf = Rotate(-Valkyrie.qMotor*DEG2RAD, 0,0) * Translate(-WRIST_RAD*INTOPIXELS, 0, 0) * Pitch.transf;
 	Solenoid.transf = Rotate(0, M_PI, 0) * Translate(WRIST_RAD*INTOPIXELS, 0, 0) * Pitch.transf;
@@ -57,7 +58,7 @@ void IK::TransformArm()
 	UpdateRayLibMatrix(Solenoid);
 }
 
-void IK::UpdateRayLibMatrix(joint &J)
+void Simulator::UpdateRayLibMatrix(joint &J)
 {
 	J.model.transform.m0 = J.transf.m0;
 	J.model.transform.m1 = J.transf.m1;
@@ -77,7 +78,7 @@ void IK::UpdateRayLibMatrix(joint &J)
 	J.model.transform.m15 = J.transf.m15;
 }
 
-void IK::Keyboard() 
+void Simulator::Keyboard() 
 {
 	if (IsKeyPressed(KEY_M)) {
 		if (currentMode == OPEN_LOOP) currentMode = CLOSED_LOOP;
@@ -134,7 +135,7 @@ void IK::Keyboard()
 	}
 }
 
-bool IK::atFwdLim(joint J) 
+bool Simulator::atFwdLim(joint J) 
 {
 	if (limsOverride) return false;
 	if (J.RevLim > J.FwdLim) {
@@ -143,7 +144,7 @@ bool IK::atFwdLim(joint J)
 	return J.qMotor >= J.FwdLim;
 }
 
-bool IK::atRevLim(joint J) 
+bool Simulator::atRevLim(joint J) 
 {
 	if (limsOverride) return false;
 	if (J.RevLim > J.FwdLim) {
@@ -152,13 +153,13 @@ bool IK::atRevLim(joint J)
 	return J.qMotor <= J.RevLim;
 }
 
-void IK::LimitJoint(joint &J) 
+void Simulator::LimitJoint(joint &J) 
 {
 	if (atFwdLim(J)) J.qMotor = J.FwdLim;
 	if (atRevLim(J)) J.qMotor = J.RevLim;
 }
 
-void IK::UpdateJoint(joint &J) 
+void Simulator::UpdateJoint(joint &J) 
 {
 	if (currentMode == CLOSED_LOOP) { //Limit closed loop target angles
 		if (J.qTarget > J.FwdLim) J.qTarget = J.FwdLim;
@@ -173,11 +174,11 @@ void IK::UpdateJoint(joint &J)
 	LimitJoint(J);
 }
 
-void IK::Update() 
+void Simulator::Update() 
 {
 	if (((currentMode == CLOSED_LOOP) || (currentMode == INVERSE_KINEMATICS)) && (currentMode != prevMode)) HoldCurrentPosition();
 	if (currentMode == INVERSE_KINEMATICS) {
-		if (!CalculateInverseKinematics(WristPos, wrist.pitch, wrist.valk, J1.qTarget, J2.qTarget, J3.qTarget, J4.qTarget, Pitch.qTarget, Valkyrie.qTarget, J3.FwdLim, J3.RevLim)) HoldCurrentPosition();
+		if (!CalculateInverseKinematics(Valkyrie.transf, WristPos, GripperPos, wrist.j4, wrist.pitch, wrist.valk, J1.qTarget, J2.qTarget, J3.qTarget, J4.qTarget, Pitch.qTarget, Valkyrie.qTarget, J3.FwdLim, J3.RevLim, lockMode)) HoldCurrentPosition();
 	} else {
 		J3.FwdLim = J3_POS_LIM;
 		J3.RevLim = J3_NEG_LIM;
@@ -191,14 +192,15 @@ void IK::Update()
 
 	prevMode = currentMode;
 
-	GripperPos = {0,0,0}; //pixels
-	GripperPos = GripperPos * (Translate(-VALK_LENGTH*INTOPIXELS, 0, 0) * Valkyrie.transf);
 }
 
-void IK::HoldCurrentPosition() 
+void Simulator::HoldCurrentPosition() 
 {
 	WristPos = {0,0,0};
 	WristPos = WristPos * (Translate(J3_LENGTH, 0, 0) * Rotate(0,0, J3.qMotor*DEG2RAD) * Translate(J2_LENGTH, 0, 0) * Rotate(0,0, J2.qMotor*DEG2RAD) * Translate(0,0, J1.qMotor));
+
+	GripperPos = {0,0,0}; //pixels
+	GripperPos = GripperPos * (Translate(-VALK_LENGTH*INTOPIXELS, 0, 0) * Valkyrie.transf);
 
 	wrist.pitch = Pitch.qMotor + J2.qMotor + J3.qMotor;
 	wrist.j4 = J4.qMotor;
