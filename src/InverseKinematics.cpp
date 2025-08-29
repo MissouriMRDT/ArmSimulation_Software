@@ -19,27 +19,9 @@ bool CalculateInverseKinematics(TransfMatrix valkTransf, Vector &pos, Vector &gr
     qP = wristPitch - (q2 + q3);
     qV = wristValkyrie;
 
-    //LockMode
-    if (lockMode) 
-    {
-        q4 = wristJ4;
-        // pos = {0,0,0};
-        TransfMatrix endEffectorSpace = (Translate(J3_LENGTH, 0, 0) * Rotate(0,0, q3*DEG2RAD) * Translate(J2_LENGTH, 0, 0) * Rotate(0,0, q2*DEG2RAD) * Translate(0,0, q1));
-        Vector gripperPosInEndEffectorSpace = gripperPos * endEffectorSpace;
-
-        // pos *= PIXELSTOIN;
-
-        DrawText("X: ", 5,650,20,BLACK);
-        DrawText(TextFormat("%.2f", pos.x), 40,500,20,BLACK);
-        DrawText("Y: ", 150,650,20,BLACK);
-        DrawText(TextFormat("%.2f", pos.y), 190,500,20,BLACK);
-        DrawText("Z: ", 150,650,20,BLACK);
-        DrawText(TextFormat("%.2f", pos.z), 400,500,20,BLACK);
-    } else {
-        q4 = 0; //Lock J4
-        gripperPos = {0,0,0}; //pixels
-	    gripperPos = gripperPos * (Translate(-VALK_LENGTH*INTOPIXELS, 0, 0) * valkTransf);
-    }
+    q4 = 0; //Lock J4
+    gripperPos = {0,0,0}; //pixels
+    gripperPos = gripperPos * (Translate(-VALK_LENGTH*INTOPIXELS, 0, 0) * valkTransf);
 
 	//Calculate target angles using IK
 	q1 = pos.z;
@@ -51,13 +33,37 @@ bool CalculateInverseKinematics(TransfMatrix valkTransf, Vector &pos, Vector &gr
 	q3 = underMode? q3 : -q3;
 
 	// Check if calculated angle is invalid and limit movement
-	if (isOutsideTargetRange(J1_FWD_LIM, J1_REV_LIM, q1) || isOutsideTargetRange(J2_FWD_LIM, J2_REV_LIM, q2) || isOutsideTargetRange(J3FwdLim, J3RevLim, q3) || isOutsideTargetRange(PITCH_FWD_LIM, PITCH_REV_LIM, qP) || isOutsideTargetRange(J4_FWD_LIM, J4_REV_LIM, q4)) return false;
+	if (!(isInSafeZone(J1_FWD_LIM, J1_REV_LIM, q1) && isInSafeZone(J2_FWD_LIM, J2_REV_LIM, q2) && isInSafeZone(J3FwdLim, J3RevLim, q3) && isInSafeZone(PITCH_FWD_LIM, PITCH_REV_LIM, qP) && isInSafeZone(J4_FWD_LIM, J4_REV_LIM, q4))) return false;
     return true;
 }
 
-bool isOutsideTargetRange(float fwdLim, float revLim, float angle)
+bool isInSafeZone(float fwdLim, float revLim, float angle)
 {
-    if (angle > fwdLim) return true;
-	if (angle < revLim) return true;
-	return false;
+    if (fwdLim > revLim) {
+        return ((angle < fwdLim) && (angle > revLim));
+    } else if (fwdLim < revLim) {
+        return ((angle < fwdLim) || (angle > revLim));
+    } else {
+        return true;
+    }
+}
+
+float distanceBetweenAngles(float fromAngle, float toAngle) 
+{
+    if (abs(toAngle - fromAngle) <= 180) {
+        return toAngle - fromAngle;
+    } else {
+        if (fromAngle > toAngle) {
+            return (360 - fromAngle) + toAngle;
+        } else {
+            return -((360 - toAngle) + fromAngle);
+        }
+    }
+}
+
+float boundTo360(float degrees)
+{
+	if (degrees < 0) degrees += 360;
+    else if (degrees > 360) degrees -= 360;
+    return degrees;
 }

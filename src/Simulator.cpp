@@ -23,8 +23,8 @@ void Simulator::Draw()
 	DrawText(TextFormat("%.2f", WristPos.x), 40,650,20,BLACK);
 	DrawText("Y: ", 150,650,20,BLACK);
 	DrawText(TextFormat("%.2f", WristPos.y), 190,650,20,BLACK);
-	DrawText("P: ", 5,600,20,BLACK);
-	DrawText(TextFormat("%.2f", Pitch.qMotor), 60,600,20,BLACK);
+	// DrawText("P: ", 5,600,20,BLACK);
+	// DrawText(TextFormat("%.2f", Pitch.qMotor), 60,600,20,BLACK);
 	// DrawText("Valkyriet: ", 150,600,20,BLACK);
 	// DrawText(TextFormat("%.2f", RAD2DEG*Valkyrie.qTarget), 210,600,20,BLACK);
 
@@ -155,16 +155,29 @@ bool Simulator::atRevLim(joint J)
 
 void Simulator::LimitJoint(joint &J) 
 {
-	if (atFwdLim(J)) J.qMotor = J.FwdLim;
-	if (atRevLim(J)) J.qMotor = J.RevLim;
+	if (!isInSafeZone(J.FwdLim, J.RevLim, J.qMotor)) {
+        float distanceToForward = distanceBetweenAngles(J.qMotor, J.FwdLim);
+        float distanceToReverse = distanceBetweenAngles(J.qMotor, J.RevLim);
+        if (abs(distanceToForward) < abs(distanceToReverse)) J.qMotor = J.FwdLim;
+        else J.qMotor = J.RevLim;
+    }
 }
 
 void Simulator::UpdateJoint(joint &J) 
 {
-	if (currentMode == CLOSED_LOOP) { //Limit closed loop target angles
-		if (J.qTarget > J.FwdLim) J.qTarget = J.FwdLim;
-		else if (J.qTarget < J.RevLim) J.qTarget = J.RevLim;
-	}
+	if (!isInSafeZone(J.FwdLim, J.RevLim, J.qTarget)) {
+        float distanceToForward = distanceBetweenAngles(J.qTarget, J.FwdLim);
+        float distanceToReverse = distanceBetweenAngles(J.qTarget, J.RevLim);
+        if (abs(distanceToForward) < abs(distanceToReverse)) J.qTarget = J.FwdLim;
+        else J.qTarget = J.RevLim;
+    }
+
+	if (!isInSafeZone(J.FwdLim, J.RevLim, J.qTarget)) {
+        float distanceToForward = distanceBetweenAngles(J.qTarget, J.FwdLim);
+        float distanceToReverse = distanceBetweenAngles(J.qTarget, J.RevLim);
+        if (abs(distanceToForward) < abs(distanceToReverse)) J.qTarget = J.FwdLim;
+        else J.qTarget = J.RevLim;
+    }
 
 	if (buttonInput == J.button) {
 		direction? J.qMotor += (SPEED*2) : J.qMotor -= (SPEED*2); //Set decipercent
@@ -183,6 +196,18 @@ void Simulator::Update()
 		J3.FwdLim = J3_POS_LIM;
 		J3.RevLim = J3_NEG_LIM;
 	}
+
+	J4.qMotor = boundTo360(J4.qMotor);
+	Pitch.qMotor = boundTo360(Pitch.qMotor);
+	Valkyrie.qMotor = boundTo360(Valkyrie.qMotor);
+
+	J4.qTarget = boundTo360(J4.qTarget);
+	Pitch.qTarget = boundTo360(Pitch.qTarget);
+	Valkyrie.qTarget = boundTo360(Valkyrie.qTarget);
+
+	wrist.pitch = boundTo360(wrist.pitch);
+	wrist.j4 = boundTo360(wrist.j4);
+
 	UpdateJoint(J1);
 	UpdateJoint(J2);
 	UpdateJoint(J3);

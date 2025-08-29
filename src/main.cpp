@@ -43,13 +43,4 @@ TODO:
 		Display angles and position
 		Path of motion for keyboard typing?
 		Need to add x axis and shoulder?
-
-	Make xyz pos and joint angles input to IKcalc func, output desired joint angles
-		Call in different file
-		Make IK a library for both simulator and arm board
-	Update arm software values for physical system
-
-	Make emb software updated
-	Make own vector struct instead
-	Fix limits to be like real arm
 */
