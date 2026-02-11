@@ -1,14 +1,63 @@
 #include "Simulator.h"
+#include <raylib.h>
+#include <raymath.h>
+
+Simulator::Simulator() {
+	camera.position = { 10, 15, 20 };
+	camera.target = { 10, 15, 0 };
+	camera.up = { 0.0f, 1.0f, 0.0f };
+	camera.fovy = 90.0f;
+	camera.projection = CAMERA_PERSPECTIVE;
+	// DisableCursor();
+
+	LoadModels();
+	wristTarget = {0, 0, 0};
+
+	underMode = lockMode = 0;
+	limsOverride = false;
+	direction = false;
+	buttonInput = 0;
+	currentMode = OPEN_LOOP;
+	prevMode = OPEN_LOOP;
+
+	Reset();
+}
+
+Simulator::~Simulator() {
+	UnloadModels();
+}
 
 void Simulator::Draw() 
 {
-	DrawModel(J2.model, (Vector3){0.0f, 0.0f, 0.0f }, 1.0f, RED);		
-	DrawModel(J3.model, (Vector3){0, 0, 0}, 1.0f, BLUE);
-	DrawModel(J4.model, (Vector3){0, 0, 0}, 1.0f, ORANGE);
-	DrawModel(Pitch.model, (Vector3){0, 0, 0}, 1.0f, PURPLE);
-	DrawModel(Valkyrie.model, (Vector3){0, 0, 0}, 1.0f, GREEN);
-	DrawModel(Solenoid.model, (Vector3){0, 0, 0}, 1.0f, MAROON);
-	DrawSphere({GripperPos.x, GripperPos.y, GripperPos.z}, 2, MAROON);
+	JointPositions angles = arm.getJointPositions();
+	XAxisModel.transform = MatrixIdentity();
+	ShoulderModel.transform = MatrixTranslate(SHOULDER_OVERHANG, 0, angles.X);
+	BicepModel.transform = MatrixRotateZ(-angles.J2*DEG2RAD) * MatrixTranslate(0, SHOULDER_LENGTH, 0) * ShoulderModel.transform;
+	ForearmRollModel.transform = MatrixRotateZ(-angles.J3*DEG2RAD) * MatrixTranslate(0, BICEP_LENGTH, 0) * BicepModel.transform;
+	ForearmModel.transform = MatrixRotateX(angles.J4*DEG2RAD) * MatrixTranslate(FOREARM_ROLL_PARTIAL_LENGTH, FOREARM_ROLL_LENGTH, 0) * ForearmRollModel.transform;
+	WristModel.transform = MatrixRotateZ(angles.J5*DEG2RAD) * MatrixTranslate(FOREARM_PARTIAL_LENGTH, 0, 0) * ForearmModel.transform;
+	GripperModel.transform = MatrixRotateX(angles.J6) * MatrixTranslate(WRIST_LENGTH, 0, 0) * WristModel.transform;
+
+	UpdateCamera(&camera, CAMERA_CUSTOM);
+
+	ClearBackground(WHITE);
+	BeginDrawing();
+	BeginMode3D(camera);
+
+	DrawModel(XAxisModel, {0.0f, 0.0f, 0.0f }, 1.0f, GRAY);		
+	DrawModel(ShoulderModel, {0.0f, 0.0f, 0.0f }, 1.0f, RED);		
+	DrawModel(BicepModel, {0, 0, 0}, 1.0f, BLUE);
+	DrawModel(ForearmRollModel, {0, 0, 0}, 1.0f, ORANGE);
+	DrawModel(ForearmModel, {0, 0, 0}, 1.0f, PURPLE);
+	DrawModel(WristModel, {0, 0, 0}, 1.0f, GREEN);
+	DrawModel(GripperModel, {0, 0, 0}, 1.0f, MAROON);
+	Vector gripperPos = arm.getGripperCoordinates();
+	DrawSphere({gripperPos.x, gripperPos.y, gripperPos.z}, 2, MAROON);
+
+	DrawCube({0, 0, 0}, 1, 1, 1, LIGHTGRAY);
+	DrawCube({1, 0, 0}, 0.2, 0.2, 0.2, RED);
+	DrawCube({0, 1, 0}, 0.2, 0.2, 0.2, BLUE);
+	DrawCube({0, 0, 1}, 0.2, 0.2, 0.2, LIME);
 	DrawGrid(100, 10.0f);
 
 	EndMode3D();
@@ -20,9 +69,9 @@ void Simulator::Draw()
 	else DrawText("IK", 150,700,20,BLACK);
 	if (lockMode) DrawText("LOCK", 80,700,20,BLACK);
 	DrawText("X: ", 5,650,20,BLACK);
-	DrawText(TextFormat("%.2f", WristPos.x), 40,650,20,BLACK);
+	DrawText(TextFormat("%.2f", wristTarget.x), 40,650,20,BLACK);
 	DrawText("Y: ", 150,650,20,BLACK);
-	DrawText(TextFormat("%.2f", WristPos.y), 190,650,20,BLACK);
+	DrawText(TextFormat("%.2f", wristTarget.y), 190,650,20,BLACK);
 	// DrawText("P: ", 5,600,20,BLACK);
 	// DrawText(TextFormat("%.2f", Pitch.qMotor), 60,600,20,BLACK);
 	// DrawText("Valkyriet: ", 150,600,20,BLACK);
@@ -31,210 +80,113 @@ void Simulator::Draw()
 	EndDrawing();
 }
 
-void Simulator::Unload() 
-{
-	UnloadModel(J2.model);
-	UnloadModel(J3.model);
-	UnloadModel(J4.model);
-	UnloadModel(Pitch.model);
-	UnloadModel(Valkyrie.model);
-	UnloadModel(Solenoid.model);
+void Simulator::LoadModels() {
+	SearchAndSetResourceDir("resources");
+	XAxisModel = LoadModel("Athena/XAxis.obj");
+	ShoulderModel = LoadModel("Athena/Shoulder.obj");
+	BicepModel = LoadModel("Athena/Bicep.obj");
+	ForearmRollModel = LoadModel("Athena/Forearm_Roll.obj");
+	ForearmModel = LoadModel("Athena/Forearm.obj");
+	WristModel = LoadModel("Athena/Wrist.obj");
+	GripperModel = LoadModel("Athena/Gripper.obj");
 }
 
-void Simulator::TransformArm() 
+void Simulator::UnloadModels() 
 {
-	J2.transf = Rotate(0,0, -J2.qMotor*DEG2RAD) * Translate(0,0, INTOPIXELS*J1.qMotor);
-	J3.transf = Rotate(0, 0, -J3.qMotor*DEG2RAD) * Translate(-J2_LENGTH*INTOPIXELS, 0, 0) * J2.transf;
-	J4.transf = Rotate((-J4.qMotor)*DEG2RAD, 0,0) * Translate(-SHOULDER_LENGTH*INTOPIXELS, 0, 0) * J3.transf;
-	Pitch.transf = Rotate(0,0, -Pitch.qMotor*DEG2RAD) * Translate(-(J3_LENGTH-SHOULDER_LENGTH)*INTOPIXELS, 0, 0) * J4.transf;
-	Valkyrie.transf = Rotate(-Valkyrie.qMotor*DEG2RAD, 0,0) * Translate(-WRIST_RAD*INTOPIXELS, 0, 0) * Pitch.transf;
-	Solenoid.transf = Rotate(0, M_PI, 0) * Translate(WRIST_RAD*INTOPIXELS, 0, 0) * Pitch.transf;
-
-	UpdateRayLibMatrix(J2);
-	UpdateRayLibMatrix(J3);
-	UpdateRayLibMatrix(J4);
-	UpdateRayLibMatrix(Pitch);
-	UpdateRayLibMatrix(Valkyrie);
-	UpdateRayLibMatrix(Solenoid);
+	UnloadModel(XAxisModel);
+	UnloadModel(ShoulderModel);
+	UnloadModel(BicepModel);
+	UnloadModel(ForearmRollModel);
+	UnloadModel(ForearmModel);
+	UnloadModel(WristModel);
+	UnloadModel(GripperModel);
 }
 
-void Simulator::UpdateRayLibMatrix(joint &J)
+void Simulator::ProcessInput() 
 {
-	J.model.transform.m0 = J.transf.m0;
-	J.model.transform.m1 = J.transf.m1;
-	J.model.transform.m2 = J.transf.m2;
-	J.model.transform.m3 = J.transf.m3;
-	J.model.transform.m4 = J.transf.m4;
-	J.model.transform.m5 = J.transf.m5;
-	J.model.transform.m6 = J.transf.m6;
-	J.model.transform.m7 = J.transf.m7;
-	J.model.transform.m8 = J.transf.m8;
-	J.model.transform.m9 = J.transf.m9;
-	J.model.transform.m10 = J.transf.m10;
-	J.model.transform.m11 = J.transf.m11;
-	J.model.transform.m12 = J.transf.m12;
-	J.model.transform.m13 = J.transf.m13;
-	J.model.transform.m14 = J.transf.m14;
-	J.model.transform.m15 = J.transf.m15;
-}
+	axes[LEFT_STICK_X] = IsKeyDown(KEY_A) - IsKeyDown(KEY_D);
+	axes[LEFT_STICK_Y] = IsKeyDown(KEY_W) - IsKeyDown(KEY_S);
+	axes[RIGHT_STICK_X] = IsKeyDown(KEY_J) - IsKeyDown(KEY_L);
+	axes[RIGHT_STICK_Y] = IsKeyDown(KEY_I) - IsKeyDown(KEY_K);
+	axes[BUMPERS] = IsKeyDown(KEY_U) - IsKeyDown(KEY_E);
+	axes[TRIGGERS] = IsKeyDown(KEY_O) - IsKeyDown(KEY_Q);
+	axes[D_PAD_X] = IsKeyDown(KEY_RIGHT) - IsKeyDown(KEY_LEFT);
+	axes[D_PAD_Y] = IsKeyDown(KEY_UP) - IsKeyDown(KEY_DOWN);
 
-void Simulator::Keyboard() 
-{
 	if (IsKeyPressed(KEY_M)) {
 		if (currentMode == OPEN_LOOP) currentMode = CLOSED_LOOP;
 		else if (currentMode == CLOSED_LOOP) currentMode = INVERSE_KINEMATICS;
 		else currentMode = OPEN_LOOP;
 	}
-	
-	if (currentMode == OPEN_LOOP) {
-		lockMode = false;
-		if(IsKeyPressed(KEY_ZERO)) direction = direction? false : true;
-		if(IsKeyDown(KEY_ONE)) buttonInput = 1; //X
-		else if(IsKeyDown(KEY_TWO)) buttonInput = 2; //J2
-		else if(IsKeyDown(KEY_THREE)) buttonInput = 3; //J3
-		else if(IsKeyDown(KEY_FOUR)) buttonInput = 4; //J4
-		else if(IsKeyDown(KEY_FIVE)) buttonInput = 5; //Pitch
-		else if(IsKeyDown(KEY_SIX)) buttonInput = 6; //Roll Valkyrie
-		else buttonInput = 0;
-	} else if (currentMode == INVERSE_KINEMATICS) {
-		if(IsKeyDown(KEY_UP)) WristPos.y += SPEED;
-		if(IsKeyDown(KEY_DOWN)) WristPos.y -= SPEED;
-		if(IsKeyDown(KEY_LEFT)) WristPos.x -= SPEED;
-		if(IsKeyDown(KEY_RIGHT)) WristPos.x += SPEED;		
-		if(IsKeyDown(KEY_Z)) WristPos.z -= SPEED;
-		if(IsKeyDown(KEY_C)) WristPos.z += SPEED;
-		if(IsKeyDown(KEY_R)) wrist.j4 += (SPEED*SPD_MOD4);
-		if(IsKeyDown(KEY_F)) wrist.j4 -= (SPEED*SPD_MOD4);
-		if(IsKeyDown(KEY_E)) wrist.pitch += (SPEED*SPD_MOD4);
-		if(IsKeyDown(KEY_Q)) wrist.pitch -= (SPEED*SPD_MOD4);
-		if(IsKeyDown(KEY_V)) wrist.valk += (SPEED*SPD_MOD4);
-		if(IsKeyPressed(KEY_L)) lockMode = lockMode? false : true;
-	} else if (currentMode == CLOSED_LOOP) {
-		lockMode = false;
-		if(IsKeyDown(KEY_UP)) J2.qTarget += (SPEED*SPD_MOD2);
-		if(IsKeyDown(KEY_DOWN)) J2.qTarget -= (SPEED*SPD_MOD2);
-		if(IsKeyDown(KEY_LEFT)) J3.qTarget -= (SPEED*SPD_MOD2);
-		if(IsKeyDown(KEY_RIGHT)) J3.qTarget += (SPEED*SPD_MOD2);
-		if(IsKeyDown(KEY_Z)) J1.qTarget -= (SPEED*SPD_MOD2);
-		if(IsKeyDown(KEY_C)) J1.qTarget += (SPEED*SPD_MOD2);
-		if(IsKeyDown(KEY_R)) J4.qTarget -= (SPEED*SPD_MOD4);
-		if(IsKeyDown(KEY_F)) J4.qTarget += (SPEED*SPD_MOD4);
-		if(IsKeyDown(KEY_E)) Pitch.qTarget += (SPEED*SPD_MOD4);
-		if(IsKeyDown(KEY_Q)) Pitch.qTarget -= (SPEED*SPD_MOD4);
-		if(IsKeyDown(KEY_V)) Valkyrie.qTarget += (SPEED*SPD_MOD4);
+
+	if(currentMode == INVERSE_KINEMATICS && IsKeyPressed(KEY_L)) {
+		lockMode = lockMode? false : true;
 	}
-	
-	if(IsKeyDown(KEY_P)) {
-		WristPos.x = 10;
-		WristPos.y = 0;
-		WristPos.z = 0;
-		wrist.j4 = 0;
-		wrist.pitch = 0;
-		wrist.valk = 0;
+
+	if(IsKeyPressed(KEY_P)) {
+		Reset();
 		underMode = false;
 	}
 }
 
-bool Simulator::atFwdLim(joint J) 
-{
-	if (limsOverride) return false;
-	if (J.RevLim > J.FwdLim) {
-		return (J.qMotor >= J.FwdLim) && (J.qMotor <= (J.RevLim + J.FwdLim)/2);
+void Simulator::Update(float delta) 
+{	
+	if (currentMode == OPEN_LOOP) {
+		lockMode = false;
+		arm.driveOpenLoop(
+			axes[RIGHT_STICK_X] * OPEN_LOOP_DUTY,
+			axes[RIGHT_STICK_Y] * OPEN_LOOP_DUTY,
+			axes[LEFT_STICK_Y] * OPEN_LOOP_DUTY,
+			axes[LEFT_STICK_X] * OPEN_LOOP_DUTY,
+			axes[TRIGGERS] * OPEN_LOOP_DUTY,
+			axes[BUMPERS] * OPEN_LOOP_DUTY
+		);
+	} else if (currentMode == INVERSE_KINEMATICS) {
+		wristTarget.x += axes[RIGHT_STICK_X] * CLOSED_LOOP_SPEED * delta;
+		wristTarget.y += axes[RIGHT_STICK_Y] * CLOSED_LOOP_SPEED * delta;
+		wristTarget.z += axes[LEFT_STICK_Y] * CLOSED_LOOP_SPEED * delta;
+		targetAngles.J4 += axes[LEFT_STICK_X] * CLOSED_LOOP_SPEED * delta;
+		targetAngles.J5 += axes[TRIGGERS] * CLOSED_LOOP_SPEED * delta;
+		targetAngles.J6 += axes[BUMPERS] * CLOSED_LOOP_SPEED * delta;
+		
+	} else if (currentMode == CLOSED_LOOP) {
+		lockMode = false;
+		targetAngles.X += axes[RIGHT_STICK_X] * CLOSED_LOOP_SPEED * delta;
+		targetAngles.J2 += axes[RIGHT_STICK_Y] * CLOSED_LOOP_SPEED * delta;
+		targetAngles.J3 += axes[LEFT_STICK_Y] * CLOSED_LOOP_SPEED * delta;
+		targetAngles.J4 += axes[LEFT_STICK_X] * CLOSED_LOOP_SPEED * delta;
+		targetAngles.J5 += axes[TRIGGERS] * CLOSED_LOOP_SPEED * delta;
+		targetAngles.J6 += axes[BUMPERS] * CLOSED_LOOP_SPEED * delta;
+		arm.driveTargetAngles(
+			targetAngles.X,
+			targetAngles.J2,
+			targetAngles.J3,
+			targetAngles.J4,
+			targetAngles.J5,
+			targetAngles.J6
+		);
 	}
-	return J.qMotor >= J.FwdLim;
+	arm.update(delta);
 }
 
-bool Simulator::atRevLim(joint J) 
-{
-	if (limsOverride) return false;
-	if (J.RevLim > J.FwdLim) {
-		return (J.qMotor <= J.RevLim) && (J.qMotor >= (J.RevLim + J.FwdLim)/2);
-	}
-	return J.qMotor <= J.RevLim;
-}
+void Simulator::Reset() {
+	wristTarget.x = 10;
+	wristTarget.y = 0;
+	wristTarget.z = 0;
 
-void Simulator::LimitJoint(joint &J) 
-{
-	if (!isInSafeZone(J.FwdLim, J.RevLim, J.qMotor)) {
-        float distanceToForward = distanceBetweenAngles(J.qMotor, J.FwdLim);
-        float distanceToReverse = distanceBetweenAngles(J.qMotor, J.RevLim);
-        if (abs(distanceToForward) < abs(distanceToReverse)) J.qMotor = J.FwdLim;
-        else J.qMotor = J.RevLim;
-    }
-}
+	targetAngles.X = 0;
+	targetAngles.J2 = 0;
+	targetAngles.J3 = 0;
+	targetAngles.J4 = 0;
+	targetAngles.J5 = 0;
+	targetAngles.J6 = 0;
 
-void Simulator::UpdateJoint(joint &J) 
-{
-	if (!isInSafeZone(J.FwdLim, J.RevLim, J.qTarget)) {
-        float distanceToForward = distanceBetweenAngles(J.qTarget, J.FwdLim);
-        float distanceToReverse = distanceBetweenAngles(J.qTarget, J.RevLim);
-        if (abs(distanceToForward) < abs(distanceToReverse)) J.qTarget = J.FwdLim;
-        else J.qTarget = J.RevLim;
-    }
-
-	if (!isInSafeZone(J.FwdLim, J.RevLim, J.qTarget)) {
-        float distanceToForward = distanceBetweenAngles(J.qTarget, J.FwdLim);
-        float distanceToReverse = distanceBetweenAngles(J.qTarget, J.RevLim);
-        if (abs(distanceToForward) < abs(distanceToReverse)) J.qTarget = J.FwdLim;
-        else J.qTarget = J.RevLim;
-    }
-
-	if (buttonInput == J.button) {
-		direction? J.qMotor += (SPEED*2) : J.qMotor -= (SPEED*2); //Set decipercent
-	} else if ((currentMode == CLOSED_LOOP) || (currentMode == INVERSE_KINEMATICS)) {
-		J.qMotor = J.qTarget; //SetAngle()
-	}
-	LimitJoint(J);
-}
-
-void Simulator::Update() 
-{
-	if (((currentMode == CLOSED_LOOP) || (currentMode == INVERSE_KINEMATICS)) && (currentMode != prevMode)) HoldCurrentPosition();
-	if (currentMode == INVERSE_KINEMATICS) {
-		if (!CalculateInverseKinematics(Valkyrie.transf, WristPos, GripperPos, wrist.j4, wrist.pitch, wrist.valk, J1.qTarget, J2.qTarget, J3.qTarget, J4.qTarget, Pitch.qTarget, Valkyrie.qTarget, J3.FwdLim, J3.RevLim, lockMode)) HoldCurrentPosition();
-	} else {
-		J3.FwdLim = J3_POS_LIM;
-		J3.RevLim = J3_NEG_LIM;
-	}
-
-	J4.qMotor = boundTo360(J4.qMotor);
-	Pitch.qMotor = boundTo360(Pitch.qMotor);
-	Valkyrie.qMotor = boundTo360(Valkyrie.qMotor);
-
-	J4.qTarget = boundTo360(J4.qTarget);
-	Pitch.qTarget = boundTo360(Pitch.qTarget);
-	Valkyrie.qTarget = boundTo360(Valkyrie.qTarget);
-
-	wrist.pitch = boundTo360(wrist.pitch);
-	wrist.j4 = boundTo360(wrist.j4);
-
-	UpdateJoint(J1);
-	UpdateJoint(J2);
-	UpdateJoint(J3);
-	UpdateJoint(J4);
-	UpdateJoint(Pitch);
-	UpdateJoint(Valkyrie);
-
-	prevMode = currentMode;
-
-}
-
-void Simulator::HoldCurrentPosition() 
-{
-	WristPos = {0,0,0};
-	WristPos = WristPos * (Translate(J3_LENGTH, 0, 0) * Rotate(0,0, J3.qMotor*DEG2RAD) * Translate(J2_LENGTH, 0, 0) * Rotate(0,0, J2.qMotor*DEG2RAD) * Translate(0,0, J1.qMotor));
-
-	GripperPos = {0,0,0}; //pixels
-	GripperPos = GripperPos * (Translate(-VALK_LENGTH*INTOPIXELS, 0, 0) * Valkyrie.transf);
-
-	wrist.pitch = Pitch.qMotor + J2.qMotor + J3.qMotor;
-	wrist.j4 = J4.qMotor;
-	wrist.valk = Valkyrie.qMotor;
-
-	J1.qTarget = J1.qMotor;
-	J2.qTarget = J2.qMotor;
-	J3.qTarget = J3.qMotor;
-	J4.qTarget = J4.qMotor;
-	Pitch.qTarget = Pitch.qMotor;
-	Valkyrie.qTarget = Valkyrie.qMotor;
-}
+	arm.driveTargetAngles(
+		targetAngles.X,
+		targetAngles.J2,
+		targetAngles.J3,
+		targetAngles.J4,
+		targetAngles.J5,
+		targetAngles.J6
+	);
+} 
