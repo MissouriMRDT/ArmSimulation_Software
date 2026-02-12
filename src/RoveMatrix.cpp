@@ -1,11 +1,20 @@
 #include "RoveMatrix.h"
 
+TransfMatrix Transpose(const TransfMatrix& mat) {
+    return {
+        mat.m00, mat.m10, mat.m20, 0,
+        mat.m01, mat.m11, mat.m21, 0,
+        mat.m02, mat.m12, mat.m22, 0,
+        // 0, 0, 0, 1
+    };
+}
+
 TransfMatrix Identity(float scale) {
     return {
-        scale, 0.0f, 0.0f, 0.0f,
-        0.0f, scale, 0.0f, 0.0f,
-        0.0f, 0.0f, scale, 0.0f,
-        // 0.0f, 0.0f, 0.0f, scale
+        scale, 0, 0, 0,
+        0, scale, 0, 0,
+        0, 0, scale, 0,
+        // 0, 0, 0, scale
     };
 }
 
@@ -63,7 +72,7 @@ TransfMatrix operator * (const TransfMatrix& left, const TransfMatrix& right)
     return result;
 }
 
-Vector operator * (TransfMatrix mat, Vector v)
+Vector operator * (const TransfMatrix& mat, const Vector& v)
 {
     Vector result = { 0, 0, 0 };
 
@@ -78,8 +87,22 @@ Vector operator * (TransfMatrix mat, Vector v)
     return result;
 }
 
-void operator *= (Vector &v, float n)
-{
+Vector operator * (float n, const Vector& v) {
+    return {
+        n * v.x,
+        n * v.y,
+        n * v.z
+    };
+}
+Vector operator * (const Vector& v, float n) {
+    return {
+        v.x * n,
+        v.y * n,
+        v.z * n
+    };
+}
+
+void operator *= (Vector &v, float n) {
     v.x *= n;
     v.y *= n;
     v.z *= n;

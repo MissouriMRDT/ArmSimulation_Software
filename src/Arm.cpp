@@ -80,7 +80,7 @@ void Arm::driveTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4
 // Drive joints such that J5 is centered at the given coordinate
 void Arm::driveInverseKinematics(float x, float y, float z, float J4Angle, float J5Angle, float J6Angle) {
     JointPositions angles = {0, 0, 0, J4Angle, J5Angle, J6Angle};
-    if (IK::CalculateInverseKinematics(Translation(x, y, z), angles)) {
+    if (IK::CalculateInverseKinematics(Translation(x, y, z) * Rotation(J4Angle*M_PI/180, J5Angle*M_PI/180, J6Angle*M_PI/180), angles)) {
         driveTargetAngles(angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6);
     } else {
         std::cout << "IK FAILED" << std::endl;

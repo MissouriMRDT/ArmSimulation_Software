@@ -33,7 +33,7 @@ enum AxesNames {
 class Simulator {
     private:
 
-        Vector wristTarget;
+        Vector wristTarget, wristRotation;
         JointPositions targetAngles;
         float axes[AXES_COUNT];
 

@@ -36,13 +36,18 @@ void Simulator::Draw()
 	BeginDrawing();
 	BeginMode3D(camera);
 
-	DrawArm(angles);
 	if (currentMode == INVERSE_KINEMATICS) {
+		// GripperModel.transform =
+		// MatrixRotateXYZ({
+		// 	targetAngles.J4*(float)M_PI/180,
+		// 	targetAngles.J5*(float)M_PI/180,
+		// 	targetAngles.J6*(float)M_PI/180})
+		// * MatrixTranslate(wristTarget.x, wristTarget.y, wristTarget.z);
+		// DrawModel(GripperModel, {0}, 1, DARKBLUE);
 		DrawDHLinks();
 	}
+	DrawArm(angles);
 
-	Vector gripperPos = arm.getGripperCoordinates();
-	DrawSphere({gripperPos.x, gripperPos.y, gripperPos.z}, 0.5, RED);
 	if (currentMode == INVERSE_KINEMATICS) {
 		DrawSphere({wristTarget.x, wristTarget.y, wristTarget.z}, 0.5, YELLOW);
 	}
@@ -91,6 +96,9 @@ void Simulator::DrawArm(const JointPositions &angles) {
 	DrawModel(ForearmModel, {0, 0, 0}, 1.0f, PURPLE);
 	DrawModel(WristModel, {0, 0, 0}, 1.0f, GREEN);
 	DrawModel(GripperModel, {0, 0, 0}, 1.0f, MAROON);
+
+	Vector gripperPos = arm.getGripperCoordinates();
+	DrawSphere({gripperPos.x, gripperPos.y, gripperPos.z}, 0.5, RED);
 }
 
 
@@ -164,7 +172,6 @@ void Simulator::ProcessInput()
 	
 
 	if (IsGamepadAvailable(0)) {
-		// std::cout << GetGamepadName(0) << ": " << IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
 		axes[LEFT_STICK_X] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_X);
 		axes[LEFT_STICK_Y] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_Y);
 		axes[RIGHT_STICK_X] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_X);
@@ -212,16 +219,16 @@ void Simulator::Update(float delta)
 		wristTarget.x += axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta;
 		wristTarget.y += axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta;
 		wristTarget.z += axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta;
-		targetAngles.J4 += axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		targetAngles.J5 += axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		targetAngles.J6 += axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
+		wristRotation.x += axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta;
+		wristRotation.y += axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
+		wristRotation.z += axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
 		arm.driveInverseKinematics(
 			wristTarget.x, 
 			wristTarget.y,
 			wristTarget.z,
-			targetAngles.J4,
-			targetAngles.J5,
-			targetAngles.J6
+			wristRotation.x,
+			wristRotation.y,
+			wristRotation.z
 		);
 		
 	} else if (currentMode == CLOSED_LOOP) {
@@ -244,9 +251,12 @@ void Simulator::Update(float delta)
 }
 
 void Simulator::Reset() {
-	wristTarget.x = FOREARM_LENGTH;
+	wristTarget.x = FOREARM_LENGTH + WRIST_LENGTH + GRIPPER_LENGTH;
 	wristTarget.y = SHOULDER_LENGTH + BICEP_LENGTH + FOREARM_ROLL_LENGTH;
 	wristTarget.z = -6.33;
+	wristRotation.x = 0;
+	wristRotation.y = 90;
+	wristRotation.z = 0;
 
 	targetAngles.X = 0;
 	targetAngles.J2 = 0;

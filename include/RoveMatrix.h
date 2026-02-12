@@ -23,14 +23,19 @@ struct TransfMatrix {
     };
 };
 
+TransfMatrix Transpose(const TransfMatrix& mat);
+
 TransfMatrix Identity(float scale = 1.0f);
 TransfMatrix Rotation(float x, float y, float z);
 TransfMatrix Translation(float x, float y, float z);
 
 TransfMatrix operator * (const TransfMatrix& left, const TransfMatrix& right);
-Vector operator * (TransfMatrix mat, Vector v);
-Vector operator + (const Vector &v1, const Vector &v2);
-Vector operator - (const Vector &v1, const Vector &v2);
-void operator *= (Vector &v, float n);
+Vector operator * (const TransfMatrix &mat, const Vector &v);
+
+Vector operator + (const Vector& v1, const Vector& v2);
+Vector operator - (const Vector& v1, const Vector& v2);
+Vector operator * (float n, const Vector& v);
+Vector operator * (const Vector& v, float n);
+void operator *= (Vector& v, float n);
 
 #endif /*ROVE_MATRIX_H*/

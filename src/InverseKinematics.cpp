@@ -68,10 +68,21 @@ TransfMatrix IK::CalculateForwardTransform(const JointPositions &q) {
 }
 
 bool IK::CalculateInverseKinematics(const TransfMatrix &targetPose, JointPositions &outPositions) {
-    Vector p06 = { targetPose.m03, targetPose.m13, targetPose.m23 };
-    Vector z06 = {};
+    Vector p06 = {
+        targetPose.m03,
+        targetPose.m13,
+        targetPose.m23
+    };
+    TransfMatrix R06 = {
+        targetPose.m00, targetPose.m01, targetPose.m02, 0,
+        targetPose.m10, targetPose.m11, targetPose.m12, 0,
+        targetPose.m20, targetPose.m21, targetPose.m22, 0,
+        //0, 0, 0, 1
+    };
+    Vector z06 = R06 * Vector{0, 0, 1};
     // Wrist center
-    Vector p0w = p06;
+    Vector p0w = p06 - DH_6.d * z06;
+
     // X axis alone determines the position of the wrist center point along z0
     float q1 = p0w.z;
     
@@ -113,17 +124,55 @@ bool IK::CalculateInverseKinematics(const TransfMatrix &targetPose, JointPositio
         q2_2 = theta3 - theta4;
     }
 
+    float q2 = q2_1;
+    float q3 = q3_1;
+
+    // R03 = Rz(pi/2)*Rz(q2)*Rz(q3)*Rx(pi/2)
+    // TODO: optimize this into one matrix
+    TransfMatrix R03 = Rotation(0, 0, M_PI_2) * Rotation(0, 0, -q2) * Rotation(0, 0, -q3) * Rotation(M_PI_2, 0, 0);
+
+    // R06 = R03 * R36
+    // Multiply both sides by (R03)^-1 on left
+    // R36 = (R03)^T * R06
+    
+    // R36 = Rz(q4)*Rx(-pi/2)*Rz(q5)*Rx(pi/2)*Rz(q6)
+    TransfMatrix R36 = Transpose(R03) * R06;
+
+    //       | c4*c5*c6-s4*s6   -c6*s4-c4*c5*s6   c4*s5 |
+    // R36 = | c4*s6+c5*c6*s4   -s4*c5*s6+c4*c6   s4*s5 |
+    //       | -s5*c6           s5*s6             c5    |
+
+    // Note that R36[3,3] = cos(q5) therefore q5 = acos(R[3,3])
+    float q4, q5, q6;
+    q5 = acos(R36.m22);
+
+    if (sin(q5) != 0) {
+        float c4 = R36.m02 / sin(q5);
+        float s4 = R36.m12 / sin(q5);
+        float c6 = R36.m20 / -sin(q5);
+        float s6 = R36.m21 / sin(q5);
+        // for some theta = atan2(sin(theta), cos(theta))
+        q4 = atan2(s4, c4);
+        q6 = atan2(s6, c6);
+    } else {
+        // theta = q4 + q6
+        q4 = 0, q6 = 0;
+    }
+
     outPositions.X = q1;
-    outPositions.J2 = -q2_1 * 180 / M_PI;
-    outPositions.J3 = -q3_1 * 180 / M_PI;
+    outPositions.J2 = -q2 * 180/M_PI;
+    outPositions.J3 = -q3 * 180/M_PI;
+    outPositions.J4 = q4 * 180/M_PI;
+    outPositions.J5 = q5 * 180/M_PI;
+    outPositions.J6 = q6 * 180/M_PI;
 
     // For debug purposes
-    DH_1.d = outPositions.X;
-    DH_2.theta = outPositions.J2 * M_PI/180;
-    DH_3.theta = outPositions.J3 * M_PI/180;
-    DH_4.theta = outPositions.J4 * M_PI/180;
-    DH_5.theta = outPositions.J5 * M_PI/180;
-    DH_6.theta = outPositions.J6 * M_PI/180;
+    DH_1.d = q1;
+    DH_2.theta = -q2;
+    DH_3.theta = -q3;
+    DH_4.theta = q4;
+    DH_5.theta = q5;
+    DH_6.theta = q6;
 
     return true;
     

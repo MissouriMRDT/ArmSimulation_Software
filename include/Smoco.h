@@ -2,7 +2,6 @@
 #define SMOCO_H
 
 #include <cstdint>
-#include <iostream>
 // #include <ACAN_T4.h>
 
 #define SMOCO_CAN_BAUD_RATE 125000
