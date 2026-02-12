@@ -4,34 +4,6 @@
 
 // static ACAN_T4 canChannel = ACAN_T4({125000});
 
-// Soft Limits
-constexpr auto X_REV_LIM = INT32_MIN;
-constexpr auto X_FWD_LIM = INT32_MAX;
-constexpr auto X_ENC_PER_IN = ((8300 - 13100) / 1.5);
-
-constexpr auto J2_REV_LIM = 600;
-constexpr auto J2_ZERO = 1700;
-constexpr auto J2_FWD_LIM = 2400;
-constexpr auto J2_ENC_PER_DEG = ((1700 - 700) / 90.0);
-
-// J3 Encoder Reversed!
-constexpr auto J3_REV_LIM = -600;
-constexpr auto J3_ZERO = 1200 - 900;
-constexpr auto J3_FWD_LIM = 1200;
-constexpr auto J3_ENC_PER_DEG = ((1200 - 300) / 90.0);
-
-constexpr auto J4_REV_LIM = -2000;
-constexpr auto J4_ZERO = 2150;
-constexpr auto J4_FWD_LIM = 6300;
-constexpr auto J4_ENC_PER_DEG = ((2150 - 3200) / 90.0);
-
-constexpr auto J5_REV_LIM = -600;
-constexpr auto J5_ZERO = 350;
-constexpr auto J5_FWD_LIM = 1350;
-constexpr auto J5_ENC_PER_DEG = ((1350 - 350) / 90.0);
-
-constexpr auto J6_ENC_PER_DEG = ((12400 - 6170) / 180.0);
-
 // // DH Parameters, all distances in inches, all rotations in radians
 // IK::DHParameters ArmParameters[6] = {
 //     { M_PI_2, 0 /*q1*/, 0, SHOULDER_LENGTH },
@@ -56,7 +28,7 @@ Arm::Arm() :
     J3Motor(0, 20 * J3_ENC_PER_DEG),
     J4Motor(0, 20 * J4_ENC_PER_DEG),
     J5Motor(0, 20 * J5_ENC_PER_DEG),
-    J6Motor(0, 2 * J6_ENC_PER_DEG),
+    J6Motor(0, 6 * J6_ENC_PER_DEG),
     GripperMotor(0, 1)
 {
         // Set PID gains
@@ -107,7 +79,12 @@ void Arm::driveTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4
 }
 // Drive joints such that J5 is centered at the given coordinate
 void Arm::driveInverseKinematics(float x, float y, float z, float J4Angle, float J5Angle, float J6Angle) {
-
+    JointPositions angles = {0, 0, 0, J4Angle, J5Angle, J6Angle};
+    if (IK::CalculateInverseKinematics(Translation(x, y, z), angles)) {
+        driveTargetAngles(angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6);
+    } else {
+        std::cout << "IK FAILED" << std::endl;
+    }
 }
 
 void Arm::limitSwitchOverride(uint16_t bitmask) {
@@ -155,19 +132,8 @@ JointPositions Arm::getJointPositions() const {
 
 Vector Arm::getGripperCoordinates() const {
     JointPositions angles = getJointPositions();
-
-    // DH Parameters, all distances in inches, all rotations in radians
-    IK::DHParameters ArmParameters[6] = {
-        { M_PI_2, angles.X, 0, SHOULDER_LENGTH },
-        { -angles.J2 * M_PI/180, 0, 0, BICEP_LENGTH },
-        { -angles.J3 * M_PI/180, 0, M_PI_2, FOREARM_ROLL_LENGTH },
-        { angles.J4 * M_PI/180, FOREARM_LENGTH, -M_PI_2, 0},
-        { angles.J5 * M_PI/180, 0, M_PI_2, 0},
-        { angles.J6 * M_PI/180, WRIST_LENGTH + GRIPPER_LENGTH, 0, 0 }
-    };
     return
-    // Rotation(0, -M_PI_2, 0) 
-    Translation(SHOULDER_OVERHANG, 0, 0) // Initial frame
-    * IK::CalculateForwardTransform(ArmParameters, 6)
+    // Rotation(0, -M_PI_2, 0) // Initial frame
+    IK::CalculateForwardTransform(angles)
     * Vector{0, 0, 0};
 }

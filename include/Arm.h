@@ -3,23 +3,10 @@
 
 #include <cstdint>
 
+#include "ArmParameters.h"
 #include "InverseKinematics.h"
 #include "RoveMatrix.h"
 #include "Smoco.h"
-
-constexpr auto SHOULDER_OVERHANG = 4.519;
-constexpr auto SHOULDER_LENGTH = 8.256;
-constexpr auto BICEP_LENGTH = 17.0;
-constexpr auto FOREARM_ROLL_LENGTH = 5.0;
-constexpr auto FOREARM_ROLL_PARTIAL_LENGTH = 9.25;
-constexpr auto FOREARM_PARTIAL_LENGTH = 7.5;
-constexpr auto FOREARM_LENGTH = FOREARM_ROLL_PARTIAL_LENGTH + FOREARM_PARTIAL_LENGTH;
-constexpr auto WRIST_LENGTH = 2.926;
-constexpr auto GRIPPER_LENGTH = 6.5; // ish
-
-struct JointPositions {
-    float X, J2, J3, J4, J5, J6;
-};
 
 class Arm {
 private:

@@ -6,14 +6,12 @@ constexpr auto FRAME_TIME = std::chrono::nanoseconds(1'000'000'000/60);
 
 int main ()
 {
-	SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI);
-	InitWindow(1280, 720, "ArmSimulation");
-	SetTargetFPS(60);
 
 	Simulator sim;
 
 	auto then = std::chrono::system_clock::now();
-	
+
+    SetExitKey(KEY_NULL);
 	while (!WindowShouldClose())
 	{
 		auto now = std::chrono::system_clock::now();
@@ -25,7 +23,6 @@ int main ()
 			then = now;
 		}
 	}
-	CloseWindow();
 	return 0;
 }
 

@@ -5,12 +5,14 @@
 #include <raylib.h>
 #include <resource_dir.h>
 
-#include "InverseKinematics.h"
+#include "ArmParameters.h"
 #include "RoveMatrix.h"
 #include "Arm.h"
 
 #define OPEN_LOOP_DUTY (INT16_MAX / 2)
-#define CLOSED_LOOP_SPEED 0.5f
+#define CLOSED_LOOP_ANGULAR_SPEED 10.0f // degrees per second
+#define CLOSED_LOOP_LINEAR_SPEED 0.5f // inches per second
+#define IK_TARGET_SPEED 1.0f // inches per second
 #define SPD_MOD2 2.0f
 #define SPD_MOD4 4.0f
 
@@ -22,7 +24,10 @@ enum AxesNames {
     BUMPERS = 4,
     TRIGGERS = 5,
     D_PAD_X = 6,
-    D_PAD_Y = 7
+    D_PAD_Y = 7,
+    LEFT_BUMPER_TRIGGER = 8,
+    RIGHT_BUMPER_TRIGGER = 9,
+    AXES_COUNT
 };
 
 class Simulator {
@@ -30,7 +35,9 @@ class Simulator {
 
         Vector wristTarget;
         JointPositions targetAngles;
-        float axes[8];
+        float axes[AXES_COUNT];
+
+        int selectedGamepad = 0;
 
         enum ControlMode {
             OPEN_LOOP,
@@ -39,6 +46,8 @@ class Simulator {
         };
 
         Camera camera;
+        Vector2 orbit;
+
         Model XAxisModel;
         Model ShoulderModel;
         Model BicepModel;
@@ -49,7 +58,6 @@ class Simulator {
 
         Arm arm;
 
-        bool underMode, lockMode, limsOverride, direction;
         ControlMode currentMode, prevMode;
         int buttonInput;
 
@@ -63,6 +71,11 @@ class Simulator {
         void ProcessInput();
         void Update(float delta);
         void Reset();
+        void ToggleModes();
+    
+    private:
+        void DrawArm(const JointPositions &angles);
+        void DrawDHLinks();
 };
 
 #endif /*SIMULATOR_H*/
