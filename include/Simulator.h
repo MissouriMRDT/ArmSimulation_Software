@@ -32,8 +32,8 @@ enum AxesNames {
 
 class Simulator {
     private:
-
-        Vector wristTarget, wristRotation;
+        Vector wristTarget;
+        TransfMatrix wristRotation = Rotation(0, M_PI_2, 0);
         JointPositions targetAngles;
         float axes[AXES_COUNT];
 

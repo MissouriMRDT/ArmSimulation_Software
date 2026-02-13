@@ -1,5 +1,6 @@
 #include "Smoco.h"
 #include <chrono>
+#include <iostream>
 
 static std::chrono::system_clock::time_point startTime;
 
@@ -14,7 +15,7 @@ uint32_t millis() {
 }
 
 // Smoco::Smoco(ACAN_T4 *canBus, uint8_t canID) : canBus(canBus), canID(canID) {}
-Smoco::Smoco(int32_t initialPosition, float maxSpeed) : m_position(initialPosition), m_maxSpeed(maxSpeed) {}
+Smoco::Smoco(int32_t initialPosition, float maxSpeed) : m_position(initialPosition), m_mockPosition(initialPosition), m_maxSpeed(maxSpeed) {}
 
 // void Smoco::sync(CANMessage message) {
 //     if (message.id >> 4 == 0x7F) {
@@ -81,7 +82,8 @@ bool Smoco::driveOpenLoop(int16_t dutyCycle) {
     //                                                     .openLoop = {.dutyCycle = m_dutyCycle}}}
     //                              .data64});
 
-    m_mockVelocity = (float)dutyCycle / INT16_MAX * m_maxSpeed;
+    // m_mockVelocity = (float)dutyCycle / INT16_MAX * m_maxSpeed;
+    m_mode = CONTROL_MODE_OPEN_LOOP;
 
     return true;
 }
@@ -104,8 +106,9 @@ bool Smoco::driveTargetPosition(int32_t targetPosition, float errorGain) {
     //                                                                        .position = m_targetPosition}}}
     //                              .data64});
 
-    m_mockVelocity = 0;
-    m_mockPosition = targetPosition; // snap there for simulation purposes
+    // m_mockVelocity = 0;
+    // m_mockPosition = targetPosition; // snap there for simulation purposes
+    m_mode = CONTROL_MODE_POSITION;
 
     return true;
 }
@@ -127,6 +130,7 @@ bool Smoco::driveTargetVelocity(int32_t targetVelocity, float errorGain) {
     //                                                     .targetVelocity = {.errorGain = (uint16_t)(m_errorGain * 1024),
     //                                                                        .velocity = m_targetVelocity}}}
     //                              .data64});
+    m_mode = CONTROL_MODE_VELOCITY;
     return true;
 }
 
@@ -150,6 +154,7 @@ bool Smoco::driveTargetCurrent(float targetCurrent, float errorGain) {
     //                 .errorGain = (uint16_t)(m_targetCurrent * 1024),
     //                 .current = (int16_t)(targetCurrent * 8) // TODO: Update scaling factor when current is supported
     //             }}}.data64});
+    m_mode = CONTROL_MODE_CURRENT;
     return true;
 }
 
@@ -247,14 +252,71 @@ bool Smoco::ping() {
     return echoRequest(millis());
 }
 
+static double pide(double error, double P, double I, double D, double errorGain,
+                   double *lastError, double *integralError, double deltaT) {
+  error *= errorGain;
+  *integralError += error * deltaT;
+  double out =
+      P * error + I * *integralError + D * (error - *lastError) * deltaT;
+  *lastError = error;
+  return out;
+}
+
+static void ramp(double in, double *out, double rampRate, double deltaT) {
+  if (in > *out + rampRate * deltaT) {
+    *out += rampRate * deltaT;
+  } else if (in < *out - rampRate * deltaT) {
+    *out -= rampRate * deltaT;
+  } else {
+    *out = in;
+  }
+}
+
 void Smoco::update(float dt) {
+
+    switch (m_mode) {
+        case CONTROL_MODE_OPEN_LOOP:
+            m_mockVelocity = (float)m_dutyCycle * INT16_MAX / m_maxSpeed;
+            break;
+        case CONTROL_MODE_POSITION:
+            m_mockVelocity = (float)(m_targetPosition - m_mockPosition) / m_maxSpeed;
+            break;
+    }
+
+    double error;
+    switch (m_mode) {
+    case CONTROL_MODE_OPEN_LOOP:
+      m_pwm = m_pwm < -1 ? -1 : m_pwm > 1 ? 1 : m_pwm;
+      ramp((double)m_dutyCycle / 32768, &m_pwm, m_rampRate, dt);
+      break;
+    case CONTROL_MODE_POSITION:
+      error = (float)m_targetPosition - m_mockPosition;
+      m_pwm = pide(error, m_PID.P, m_PID.I, m_PID.D, m_errorGain, &m_lastError, &m_integralError, dt);
+      break;
+    case CONTROL_MODE_VELOCITY:
+      error = (float)m_targetVelocity - m_mockVelocity;
+      m_pwm = pide(error, m_PID.P, m_PID.I, m_PID.D, m_errorGain, &m_lastError, &m_integralError, dt);
+      break;
+    case CONTROL_MODE_CURRENT:
+      error = (float)m_targetCurrent - m_current;
+      m_pwm = pide(error, m_PID.P, m_PID.I, m_PID.D, m_errorGain, &m_lastError, &m_integralError, dt);
+      break;
+    default:
+      break;
+    }
+
+    // clamp to -1..1
+    m_pwm = m_pwm < -1 ? -1 : m_pwm > 1 ? 1 : m_pwm;
+
+    m_softLimitA = m_mockPosition <= m_softLimitAPosition;
+    m_softLimitB = m_mockPosition >= m_softLimitBPosition;
+    if (m_pwm < 0 && m_softLimitA || m_pwm > 0 && m_softLimitB) {
+        m_pwm = 0;
+    }
+
+    m_mockVelocity = m_pwm * m_maxSpeed;
     m_mockPosition += m_mockVelocity * dt;
-    if (m_mockPosition <= m_softLimitAPosition) {
-        m_mockPosition = m_softLimitAPosition;
-    }
-    if (m_mockPosition >= m_softLimitBPosition) {
-        m_mockPosition = m_softLimitBPosition;
-    }
+
     m_velocity = m_mockVelocity;
     m_position = m_mockPosition;
 }

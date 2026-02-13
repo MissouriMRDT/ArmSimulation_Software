@@ -21,7 +21,6 @@ IK::DHParameters IK::DHTable[6] = {
 
 // sqrt() is not constexpr until C++26 :(
 
-
 // The hypotenuse of the right triangle formed by a3 and d4
 static const float l1 = sqrt(DH_3.a*DH_3.a + DH_4.d*DH_4.d);
 // The angle of the right triangle formed by a3 and d4
@@ -54,14 +53,18 @@ TransfMatrix IK::TransformFromDH(const DHParameters &params) {
 }
 
 TransfMatrix IK::CalculateForwardTransform(const JointPositions &q) {
-    DH_1.d = q.X;
-    DH_2.theta = q.J2 * M_PI/180;
-    DH_3.theta = q.J3 * M_PI/180;
-    DH_4.theta = q.J4 * M_PI/180;
-    DH_5.theta = q.J5 * M_PI/180;
-    DH_6.theta = q.J6 * M_PI/180;
+    DHParameters params[6];
+    for (int i = 0; i < 6; i++) {
+        params[i] = DHTable[i];
+    }
+    params[0].d = q.X;
+    params[1].theta = q.J2 * M_PI/180;
+    params[2].theta = q.J3 * M_PI/180;
+    params[3].theta = q.J4 * M_PI/180;
+    params[4].theta = q.J5 * M_PI/180;
+    params[5].theta = q.J6 * M_PI/180;
     TransfMatrix forward = Identity();
-    for (const DHParameters &param : DHTable) {
+    for (const DHParameters &param : params) {
         forward = forward * TransformFromDH(param); // recall associative property of matrices
     }
     return forward;
@@ -124,6 +127,7 @@ bool IK::CalculateInverseKinematics(const TransfMatrix &targetPose, JointPositio
         q2_2 = theta3 - theta4;
     }
 
+    // Always choose solution 1
     float q2 = q2_1;
     float q3 = q3_1;
 
@@ -144,7 +148,13 @@ bool IK::CalculateInverseKinematics(const TransfMatrix &targetPose, JointPositio
 
     // Note that R36[3,3] = cos(q5) therefore q5 = acos(R[3,3])
     float q4, q5, q6;
-    q5 = acos(R36.m22);
+    float q5_1 = acos(R36.m22);
+    float q5_2 = -q5_1;
+
+    // Choose solution that minimizes the difference from the last angle
+    // float prev_q5 = outPositions.J5*M_PI/180;
+    // q5 = prev_q5 - q5_1 < prev_q5 - q5_2 ? q5_1 : q5_2;
+    q5 = q5_1;
 
     if (sin(q5) != 0) {
         float c4 = R36.m02 / sin(q5);
@@ -158,6 +168,11 @@ bool IK::CalculateInverseKinematics(const TransfMatrix &targetPose, JointPositio
         // theta = q4 + q6
         q4 = 0, q6 = 0;
     }
+
+    // float prev_j4 = outPositions.J4*M_PI/180;
+    // float diff_j4 = q4 - prev_j4;
+    // if (diff_j4 > M_PI) q4 -= M_2_PI;
+    // else if (diff_j4 < M_PI) q4 += M_2_PI; 
 
     outPositions.X = q1;
     outPositions.J2 = -q2 * 180/M_PI;

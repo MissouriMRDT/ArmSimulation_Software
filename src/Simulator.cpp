@@ -1,6 +1,7 @@
 #include "Simulator.h"
 #include <raylib.h>
 #include <raymath.h>
+#include <rlgl.h>
 
 Simulator::Simulator() {
 	SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI);
@@ -19,8 +20,6 @@ Simulator::Simulator() {
 	prevMode = OPEN_LOOP;
 
 	Reset();
-
-	arm.driveTargetAngles(-6.33, 63, -90, 0, 56, 0);
 }
 
 Simulator::~Simulator() {
@@ -36,6 +35,7 @@ void Simulator::Draw()
 	BeginDrawing();
 	BeginMode3D(camera);
 
+	DrawArm(angles);
 	if (currentMode == INVERSE_KINEMATICS) {
 		// GripperModel.transform =
 		// MatrixRotateXYZ({
@@ -44,9 +44,10 @@ void Simulator::Draw()
 		// 	targetAngles.J6*(float)M_PI/180})
 		// * MatrixTranslate(wristTarget.x, wristTarget.y, wristTarget.z);
 		// DrawModel(GripperModel, {0}, 1, DARKBLUE);
+		rlDisableDepthTest();
 		DrawDHLinks();
+		rlEnableDepthTest();
 	}
-	DrawArm(angles);
 
 	if (currentMode == INVERSE_KINEMATICS) {
 		DrawSphere({wristTarget.x, wristTarget.y, wristTarget.z}, 0.5, YELLOW);
@@ -70,12 +71,7 @@ void Simulator::Draw()
 	DrawText("Joint Target:", 5,650,20,BLACK);
 	DrawText(TextFormat("X:%.2f Y:%.2f Z:%.2f", wristTarget.x, wristTarget.y, wristTarget.z), 250,650,20,BLACK);
 	DrawText("Joint Angles:", 5,670,20, BLACK);
-	DrawText(TextFormat("X:%.2f J2:%.2f J3:%.2f J4:%.2f J5:%.2f J6:%.2f", angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6), 250,670,20,BLACK);
-
-	// DrawText("P: ", 5,600,20,BLACK);
-	// DrawText(TextFormat("%.2f", Pitch.qMotor), 60,600,20,BLACK);
-	// DrawText("Valkyriet: ", 150,600,20,BLACK);
-	// DrawText(TextFormat("%.2f", RAD2DEG*Valkyrie.qTarget), 210,600,20,BLACK);
+	DrawText(TextFormat("X:%04.2f J2:%04.2f J3:%04.2f J4:%04.2f J5:%04.2f J6:%04.2f", angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6), 250,670,20,BLACK);
 
 	EndDrawing();
 }
@@ -103,6 +99,8 @@ void Simulator::DrawArm(const JointPositions &angles) {
 
 
 void Simulator::DrawDHLinks() {
+
+	// EVIL CODE
 
 	TransfMatrix forward = Identity(); // initial frame
 
@@ -133,7 +131,6 @@ void Simulator::DrawDHLinks() {
 		DrawLine3D({curr.x, curr.y, curr.z}, {xPlus.x, xPlus.y, xPlus.z}, RED);
 		prev = curr;
 	}
-
 }
 
 void Simulator::LoadModels() {
@@ -219,17 +216,29 @@ void Simulator::Update(float delta)
 		wristTarget.x += axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta;
 		wristTarget.y += axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta;
 		wristTarget.z += axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta;
-		wristRotation.x += axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		wristRotation.y += axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		wristRotation.z += axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
+		// wristRotation.x += axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta;
+		// wristRotation.y += axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
+		// wristRotation.z += axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
+		// arm.driveInverseKinematics(
+		// 	wristTarget.x, 
+		// 	wristTarget.y,
+		// 	wristTarget.z,
+		// 	wristRotation.x,
+		// 	wristRotation.y,
+		// 	wristRotation.z
+		// );
+		TransfMatrix targetPose = 
+		Translation(0, 0, wristTarget.z)
+		* Translation(0, wristTarget.y, 0)
+		* Translation(wristTarget.x, 0, 0);
+		wristRotation = Rotation(0, axes[LEFT_STICK_X] * 0.01 * CLOSED_LOOP_ANGULAR_SPEED * delta, 0) * wristRotation;
+		wristRotation = Rotation(0, 0, axes[TRIGGERS] * 0.01 * CLOSED_LOOP_ANGULAR_SPEED * delta) * wristRotation;
+		wristRotation = Rotation(axes[BUMPERS] * 0.01 * CLOSED_LOOP_ANGULAR_SPEED * delta, 0, 0) * wristRotation;
+		targetPose = targetPose * wristRotation;
 		arm.driveInverseKinematics(
-			wristTarget.x, 
-			wristTarget.y,
-			wristTarget.z,
-			wristRotation.x,
-			wristRotation.y,
-			wristRotation.z
+			targetPose
 		);
+
 		
 	} else if (currentMode == CLOSED_LOOP) {
 		targetAngles.X += axes[RIGHT_STICK_X] * CLOSED_LOOP_LINEAR_SPEED * delta;
@@ -253,10 +262,11 @@ void Simulator::Update(float delta)
 void Simulator::Reset() {
 	wristTarget.x = FOREARM_LENGTH + WRIST_LENGTH + GRIPPER_LENGTH;
 	wristTarget.y = SHOULDER_LENGTH + BICEP_LENGTH + FOREARM_ROLL_LENGTH;
-	wristTarget.z = -6.33;
-	wristRotation.x = 0;
-	wristRotation.y = 90;
-	wristRotation.z = 0;
+	wristTarget.z = 6.33;
+	// wristRotation.x = 0;
+	// wristRotation.y = 90;
+	// wristRotation.z = 0;
+	wristRotation = Rotation(0, M_PI_2, 0);
 
 	targetAngles.X = 0;
 	targetAngles.J2 = 0;

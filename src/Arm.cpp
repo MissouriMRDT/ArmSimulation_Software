@@ -14,21 +14,13 @@
 //     { 0 /*q6*/, WRIST_LENGTH + GRIPPER_LENGTH, 0, 0 }
 // };
 
-float encToDeg(int32_t enc, int32_t encZero, float encPerDeg) {
-    return (enc - encZero) / encPerDeg;
-}
-
-int32_t degToEnc(float deg, int32_t encZero, float encPerDeg) {
-    return (deg * encPerDeg) + encZero;
-}
-
 Arm::Arm() :
-    XMotor(0, 0.5 * X_ENC_PER_IN),
-    J2Motor(0, 20 * J2_ENC_PER_DEG),
-    J3Motor(0, 20 * J3_ENC_PER_DEG),
-    J4Motor(0, 20 * J4_ENC_PER_DEG),
-    J5Motor(0, 20 * J5_ENC_PER_DEG),
-    J6Motor(0, 6 * J6_ENC_PER_DEG),
+    XMotor(degToEnc(-6.33, 0, X_ENC_PER_IN), 0.5 * X_ENC_PER_IN),
+    J2Motor(degToEnc(60, J2_ZERO, J2_ENC_PER_DEG), 20 * J2_ENC_PER_DEG),
+    J3Motor(degToEnc(-80, J3_ZERO, J3_ENC_PER_DEG), 20 * J3_ENC_PER_DEG),
+    J4Motor(degToEnc(0, J4_ZERO, J4_ENC_PER_DEG), 20 * J4_ENC_PER_DEG),
+    J5Motor(degToEnc(56, J5_ZERO, J5_ENC_PER_DEG), 20 * J5_ENC_PER_DEG),
+    J6Motor(degToEnc(0, 0, J6_ENC_PER_DEG), 6 * J6_ENC_PER_DEG),
     GripperMotor(0, 1)
 {
         // Set PID gains
@@ -77,13 +69,19 @@ void Arm::driveTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4
     J5Motor.driveTargetPosition(degToEnc(J5Angle, J5_ZERO, J5_ENC_PER_DEG), 0.05);
     J6Motor.driveTargetPosition(degToEnc(J6Angle, J6Zero, J6_ENC_PER_DEG), 0.05);
 }
-// Drive joints such that J5 is centered at the given coordinate
-void Arm::driveInverseKinematics(float x, float y, float z, float J4Angle, float J5Angle, float J6Angle) {
-    JointPositions angles = {0, 0, 0, J4Angle, J5Angle, J6Angle};
-    if (IK::CalculateInverseKinematics(Translation(x, y, z) * Rotation(J4Angle*M_PI/180, J5Angle*M_PI/180, J6Angle*M_PI/180), angles)) {
-        driveTargetAngles(angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6);
+
+void Arm::driveInverseKinematics(const TransfMatrix& targetPose) {
+    JointPositions angles = getJointPositions();
+    if (IK::CalculateInverseKinematics(targetPose, angles)) {
+        std::cout << angles.J6 << std::endl;
+        uint16_t triggeredLimits = wouldViolateSoftLimits(angles);
+        if (triggeredLimits) {
+            std::cout << "Outside limits" << std::endl;
+        } else {
+            driveTargetAngles(angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6);
+        }
     } else {
-        std::cout << "IK FAILED" << std::endl;
+        std::cout << "IK failed" << std::endl;
     }
 }
 
@@ -136,4 +134,18 @@ Vector Arm::getGripperCoordinates() const {
     // Rotation(0, -M_PI_2, 0) // Initial frame
     IK::CalculateForwardTransform(angles)
     * Vector{0, 0, 0};
+}
+
+uint16_t Arm::wouldViolateSoftLimits(const JointPositions &angles) const {
+    return (uint16_t) 0
+        | (angles.X > X_FWD_LIM_IN) << 0
+        | (angles.X < X_REV_LIM_IN) << 1
+        | (angles.J2 > J2_FWD_LIM_DEG) << 2
+        | (angles.J2 < J2_REV_LIM_DEG) << 3
+        | (angles.J3 > J3_FWD_LIM_DEG) << 4
+        | (angles.J3 < J3_REV_LIM_DEG) << 5
+        | (angles.J4 > J4_FWD_LIM_DEG) << 6
+        | (angles.J4 < J4_REV_LIM_DEG) << 7
+        | (angles.J5 > J5_FWD_LIM_DEG) << 8
+        | (angles.J5 < J5_REV_LIM_DEG) << 9;
 }

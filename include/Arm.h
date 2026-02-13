@@ -26,7 +26,8 @@ public:
     // Drive joints to target angles
     void driveTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4Angle, float J5Angle, float J6Angle);
     // Drive joints such that J5 is centered at the given coordinate
-    void driveInverseKinematics(float x, float y, float z, float J4Angle, float J5Angle, float J6Angle);
+    // void driveInverseKinematics(float x, float y, float z, float J4Angle, float J5Angle, float J6Angle);
+    void driveInverseKinematics(const TransfMatrix& targetPose);
     // Configure limits
     void limitSwitchOverride(uint16_t bitmask);
     void softLimitOverride(uint16_t bitmask);
@@ -35,6 +36,7 @@ public:
 
     JointPositions getJointPositions() const;
     Vector getGripperCoordinates() const;
+    uint16_t wouldViolateSoftLimits(const JointPositions &angles) const;
     // void holdCurrentPosition();
 
 

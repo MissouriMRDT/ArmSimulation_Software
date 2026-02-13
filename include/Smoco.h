@@ -104,7 +104,16 @@ private:
 
     float m_mockPosition = 0;
     float m_mockVelocity = 0;
-    float m_maxSpeed = 10;
+    float m_maxSpeed = 10; // (step / s)
+    double m_lastError = 0;     // (target)
+    double m_integralError = 0; // (target * s)
+    double m_pwm = 0;           // (duty cycle) [-1.0, 1.0]
+    enum SMOCO_MODE {
+        CONTROL_MODE_OPEN_LOOP,
+        CONTROL_MODE_POSITION,
+        CONTROL_MODE_VELOCITY,
+        CONTROL_MODE_CURRENT
+    } m_mode = CONTROL_MODE_OPEN_LOOP;
 
     int32_t m_position = 0; // (step)
     int16_t m_velocity = 0; // (step/s)
