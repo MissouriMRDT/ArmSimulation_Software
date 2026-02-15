@@ -10,6 +10,7 @@
 #include "Arm.h"
 
 #define OPEN_LOOP_DUTY (INT16_MAX / 2)
+#define LOCKMODE_ANGULAR_SPEED 0.1f // degrees per second
 #define CLOSED_LOOP_ANGULAR_SPEED 10.0f // degrees per second
 #define CLOSED_LOOP_LINEAR_SPEED 0.5f // inches per second
 #define IK_TARGET_SPEED 1.0f // inches per second
@@ -34,7 +35,6 @@ class Simulator {
     private:
         Vector wristTarget;
         TransfMatrix wristRotation = Rotation(0, M_PI_2, 0);
-        JointPositions targetAngles;
         float axes[AXES_COUNT];
 
         int selectedGamepad = 0;

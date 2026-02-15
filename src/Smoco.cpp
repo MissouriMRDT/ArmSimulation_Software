@@ -90,14 +90,22 @@ bool Smoco::driveOpenLoop(int16_t dutyCycle) {
 
 bool Smoco::driveTargetPosition(int32_t targetPosition, float errorGain) {
     bool ignoreLimit = false;
+
+    m_targetPosition = targetPosition;
+    m_errorGain = errorGain;
+
+    if (m_targetPosition <= m_softLimitAPosition) {
+        m_targetPosition = m_softLimitAPosition;
+    }
+    if (m_targetPosition >= m_softLimitBPosition) {
+        m_targetPosition = m_softLimitBPosition;
+    }
+
     if (targetPosition > m_targetPosition) {
         ignoreLimit = m_ignoreForwardLimit;
     } else if (targetPosition < m_targetPosition) {
         ignoreLimit = m_ignoreReverseLimit;
     }
-
-    m_targetPosition = targetPosition;
-    m_errorGain = errorGain;
     // return canBus->tryToSend(
     //     CANMessage{.id = (canID << 4) | SMOCO_MESSAGE_ID_TARGET,
     //                .len = 7,

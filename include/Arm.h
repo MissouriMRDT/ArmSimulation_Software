@@ -25,6 +25,8 @@ public:
     void driveOpenLoop(int16_t XDuty, int16_t J2Duty, int16_t J3Duty, int16_t J4Duty, int16_t J5Duty, int16_t J6Duty);
     // Drive joints to target angles
     void driveTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4Angle, float J5Angle, float J6Angle);
+    // Increment joint targets
+    void incrementTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4Angle, float J5Angle, float J6Angle);
     // Drive joints such that J5 is centered at the given coordinate
     // void driveInverseKinematics(float x, float y, float z, float J4Angle, float J5Angle, float J6Angle);
     void driveInverseKinematics(const TransfMatrix& targetPose);

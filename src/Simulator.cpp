@@ -216,24 +216,13 @@ void Simulator::Update(float delta)
 		wristTarget.x += axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta;
 		wristTarget.y += axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta;
 		wristTarget.z += axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta;
-		// wristRotation.x += axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		// wristRotation.y += axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		// wristRotation.z += axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		// arm.driveInverseKinematics(
-		// 	wristTarget.x, 
-		// 	wristTarget.y,
-		// 	wristTarget.z,
-		// 	wristRotation.x,
-		// 	wristRotation.y,
-		// 	wristRotation.z
-		// );
 		TransfMatrix targetPose = 
 		Translation(0, 0, wristTarget.z)
 		* Translation(0, wristTarget.y, 0)
 		* Translation(wristTarget.x, 0, 0);
-		wristRotation = Rotation(0, axes[LEFT_STICK_X] * 0.01 * CLOSED_LOOP_ANGULAR_SPEED * delta, 0) * wristRotation;
-		wristRotation = Rotation(0, 0, axes[TRIGGERS] * 0.01 * CLOSED_LOOP_ANGULAR_SPEED * delta) * wristRotation;
-		wristRotation = Rotation(axes[BUMPERS] * 0.01 * CLOSED_LOOP_ANGULAR_SPEED * delta, 0, 0) * wristRotation;
+		wristRotation = Rotation(0, axes[LEFT_STICK_X] * LOCKMODE_ANGULAR_SPEED * delta, 0) * wristRotation;
+		wristRotation = Rotation(0, 0, axes[TRIGGERS] * LOCKMODE_ANGULAR_SPEED * delta) * wristRotation;
+		wristRotation = Rotation(axes[BUMPERS] * LOCKMODE_ANGULAR_SPEED * delta, 0, 0) * wristRotation;
 		targetPose = targetPose * wristRotation;
 		arm.driveInverseKinematics(
 			targetPose
@@ -241,19 +230,14 @@ void Simulator::Update(float delta)
 
 		
 	} else if (currentMode == CLOSED_LOOP) {
-		targetAngles.X += axes[RIGHT_STICK_X] * CLOSED_LOOP_LINEAR_SPEED * delta;
-		targetAngles.J2 += axes[RIGHT_STICK_Y] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		targetAngles.J3 += axes[LEFT_STICK_Y] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		targetAngles.J4 += axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		targetAngles.J5 += axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		targetAngles.J6 += axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta;
-		arm.driveTargetAngles(
-			targetAngles.X,
-			targetAngles.J2,
-			targetAngles.J3,
-			targetAngles.J4,
-			targetAngles.J5,
-			targetAngles.J6
+		// std::cout << (axes[RIGHT_STICK_Y] * CLOSED_LOOP_ANGULAR_SPEED * delta) << std::endl;
+		arm.incrementTargetAngles(
+			axes[RIGHT_STICK_X] * CLOSED_LOOP_LINEAR_SPEED * delta,
+			axes[RIGHT_STICK_Y] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+			axes[LEFT_STICK_Y] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+			axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+			axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+			axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta
 		);
 	}
 	arm.update(delta);
@@ -268,27 +252,15 @@ void Simulator::Reset() {
 	// wristRotation.z = 0;
 	wristRotation = Rotation(0, M_PI_2, 0);
 
-	targetAngles.X = 0;
-	targetAngles.J2 = 0;
-	targetAngles.J3 = 0;
-	targetAngles.J4 = 0;
-	targetAngles.J5 = 0;
-	targetAngles.J6 = 0;
-
-	arm.driveTargetAngles(
-		targetAngles.X,
-		targetAngles.J2,
-		targetAngles.J3,
-		targetAngles.J4,
-		targetAngles.J5,
-		targetAngles.J6
-	);
+	arm.driveTargetAngles(0, 0, 0, 0, 0, 0);
 } 
 
 void Simulator::ToggleModes() {
 	if (currentMode == OPEN_LOOP) {
 		currentMode = CLOSED_LOOP;
-		targetAngles = arm.getJointPositions();
+		JointPositions angles = arm.getJointPositions();
+		arm.driveTargetAngles(angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6);
+		// targetAngles = arm.getJointPositions();
 	} else if (currentMode == CLOSED_LOOP) {
 		currentMode = INVERSE_KINEMATICS;
 		wristTarget = arm.getGripperCoordinates();
