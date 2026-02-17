@@ -10,12 +10,9 @@
 #include "Arm.h"
 
 #define OPEN_LOOP_DUTY (INT16_MAX / 2)
-#define LOCKMODE_ANGULAR_SPEED 0.1f // degrees per second
 #define CLOSED_LOOP_ANGULAR_SPEED 10.0f // degrees per second
 #define CLOSED_LOOP_LINEAR_SPEED 0.5f // inches per second
 #define IK_TARGET_SPEED 1.0f // inches per second
-#define SPD_MOD2 2.0f
-#define SPD_MOD4 4.0f
 
 enum AxesNames {
     LEFT_STICK_X = 0,
@@ -33,17 +30,9 @@ enum AxesNames {
 
 class Simulator {
     private:
-        Vector wristTarget;
-        TransfMatrix wristRotation = Rotation(0, M_PI_2, 0);
         float axes[AXES_COUNT];
 
         int selectedGamepad = 0;
-
-        enum ControlMode {
-            OPEN_LOOP,
-            CLOSED_LOOP,
-            INVERSE_KINEMATICS
-        };
 
         Camera camera;
         Vector2 orbit;
@@ -57,9 +46,6 @@ class Simulator {
         Model GripperModel;
 
         Arm arm;
-
-        ControlMode currentMode, prevMode;
-        int buttonInput;
 
     public:
         Simulator();
@@ -75,7 +61,7 @@ class Simulator {
     
     private:
         void DrawArm(const JointPositions &angles);
-        void DrawDHLinks();
+        void DrawDHLinks(const IK::DHParameters links[6], Color linkColor = LIGHTGRAY);
 };
 
 #endif /*SIMULATOR_H*/

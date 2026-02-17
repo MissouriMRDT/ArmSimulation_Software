@@ -1,4 +1,3 @@
-#include <raylib.h>
 #include "InverseKinematics.h"
 #include <iostream>
 
@@ -18,6 +17,23 @@ IK::DHParameters IK::DHTable[6] = {
 #define DH_4 IK::DHTable[3]
 #define DH_5 IK::DHTable[4]
 #define DH_6 IK::DHTable[5]
+
+IK::DHParameters IK::IKSolution1[6] = {
+    { M_PI_2, 0 /*q1*/, 0, SHOULDER_LENGTH },
+    { 0 /*-q2*/, 0, 0, BICEP_LENGTH },
+    { 0 /*-q3*/, 0, M_PI_2, FOREARM_ROLL_LENGTH },
+    { 0 /*q4*/, FOREARM_LENGTH, -M_PI_2, 0},
+    { 0 /*q5*/, 0, M_PI_2, 0},
+    { 0 /*q6*/, WRIST_LENGTH + GRIPPER_LENGTH, 0, 0 }
+};
+IK::DHParameters IK::IKSolution2[6] = {
+    { M_PI_2, 0 /*q1*/, 0, SHOULDER_LENGTH },
+    { 0 /*-q2*/, 0, 0, BICEP_LENGTH },
+    { 0 /*-q3*/, 0, M_PI_2, FOREARM_ROLL_LENGTH },
+    { 0 /*q4*/, FOREARM_LENGTH, -M_PI_2, 0},
+    { 0 /*q5*/, 0, M_PI_2, 0},
+    { 0 /*q6*/, WRIST_LENGTH + GRIPPER_LENGTH, 0, 0 }
+};
 
 // sqrt() is not constexpr until C++26 :(
 
@@ -71,17 +87,8 @@ TransfMatrix IK::CalculateForwardTransform(const JointPositions &q) {
 }
 
 bool IK::CalculateInverseKinematics(const TransfMatrix &targetPose, JointPositions &outPositions) {
-    Vector p06 = {
-        targetPose.m03,
-        targetPose.m13,
-        targetPose.m23
-    };
-    TransfMatrix R06 = {
-        targetPose.m00, targetPose.m01, targetPose.m02, 0,
-        targetPose.m10, targetPose.m11, targetPose.m12, 0,
-        targetPose.m20, targetPose.m21, targetPose.m22, 0,
-        //0, 0, 0, 1
-    };
+    Vector p06 = targetPose.getTranslation();
+    TransfMatrix R06 = targetPose.getRotation();
     Vector z06 = R06 * Vector{0, 0, 1};
     // Wrist center
     Vector p0w = p06 - DH_6.d * z06;
@@ -138,41 +145,82 @@ bool IK::CalculateInverseKinematics(const TransfMatrix &targetPose, JointPositio
     // R06 = R03 * R36
     // Multiply both sides by (R03)^-1 on left
     // R36 = (R03)^T * R06
+    TransfMatrix R36 = Transpose(R03) * R06;
     
     // R36 = Rz(q4)*Rx(-pi/2)*Rz(q5)*Rx(pi/2)*Rz(q6)
-    TransfMatrix R36 = Transpose(R03) * R06;
-
     //       | c4*c5*c6-s4*s6   -c6*s4-c4*c5*s6   c4*s5 |
     // R36 = | c4*s6+c5*c6*s4   -s4*c5*s6+c4*c6   s4*s5 |
     //       | -s5*c6           s5*s6             c5    |
 
     // Note that R36[3,3] = cos(q5) therefore q5 = acos(R[3,3])
     float q4, q5, q6;
-    float q5_1 = acos(R36.m22);
-    float q5_2 = -q5_1;
+    float q4_1, q5_1, q6_1;
+    float q4_2, q5_2, q6_2;
+
+    q5_1 = acos(R36.m22);
+    q5_2 = -q5_1;
 
     // Choose solution that minimizes the difference from the last angle
     // float prev_q5 = outPositions.J5*M_PI/180;
     // q5 = prev_q5 - q5_1 < prev_q5 - q5_2 ? q5_1 : q5_2;
-    q5 = q5_1;
-
-    if (sin(q5) != 0) {
-        float c4 = R36.m02 / sin(q5);
-        float s4 = R36.m12 / sin(q5);
-        float c6 = R36.m20 / -sin(q5);
-        float s6 = R36.m21 / sin(q5);
+    if (sin(q5_1) != 0) {
+        float c4 = R36.m02 / sin(q5_1);
+        float s4 = R36.m12 / sin(q5_1);
+        float c6 = R36.m20 / -sin(q5_1);
+        float s6 = R36.m21 / sin(q5_1);
         // for some theta = atan2(sin(theta), cos(theta))
-        q4 = atan2(s4, c4);
-        q6 = atan2(s6, c6);
+        q4_1 = atan2(s4, c4);
+        q6_1 = atan2(s6, c6);
     } else {
         // theta = q4 + q6
-        q4 = 0, q6 = 0;
+        // std::cout << "sin(q5) == 0" << std::endl;
+        q4_1 = 0, q6_1 = 0;
     }
+
+    // std::cout << "Solution 1: {" << q4_1 << ", " << q5_1 << ", " << q6_1 << "}" << std::endl;
+
+    if (sin(q5_2) != 0) {
+        float c4 = R36.m02 / sin(q5_2);
+        float s4 = R36.m12 / sin(q5_2);
+        float c6 = R36.m20 / -sin(q5_2);
+        float s6 = R36.m21 / sin(q5_2);
+        // for some theta = atan2(sin(theta), cos(theta))
+        q4_2 = atan2(s4, c4);
+        q6_2 = atan2(s6, c6);
+    } else {
+        // theta = q4 + q6
+        // std::cout << "sin(q5) == 0" << std::endl;
+        q4_2 = 0, q6_2 = 0;
+    }
+
+    // std::cout << "Solution 2: {" << q4_2 << ", " << q5_2 << ", " << q6_2 << "}" << std::endl;
+
+    float prev_q4 = outPositions.J4*M_PI/180;
+    float prev_q6 = outPositions.J6*M_PI/180;
+ 
+    // Choose the solution which minimizes q4
+    if (abs(prev_q4 - q4_1) < abs(prev_q4 - q4_2)) {
+        q5 = q5_1;
+        q6 = q6_1;
+        q4 = q4_1;
+    } else {
+        q5 = q5_2;
+        q6 = q6_2;
+        q4 = q4_2; 
+    }
+
+    // q6 = fmod(q6, M_PI);
+
+    // if (q6 > modulus/2) error -= modulus;
+    // else if (error < -modulus/2) error += modulus;
 
     // float prev_j4 = outPositions.J4*M_PI/180;
     // float diff_j4 = q4 - prev_j4;
     // if (diff_j4 > M_PI) q4 -= M_2_PI;
-    // else if (diff_j4 < M_PI) q4 += M_2_PI; 
+    // else if (diff_j4 < M_PI) q4 += M_2_PI;
+
+    // std::cout << "Previous q6:" << prev_q6 << ", q6:" << q6 << std::endl;
+
 
     outPositions.X = q1;
     outPositions.J2 = -q2 * 180/M_PI;
@@ -182,12 +230,19 @@ bool IK::CalculateInverseKinematics(const TransfMatrix &targetPose, JointPositio
     outPositions.J6 = q6 * 180/M_PI;
 
     // For debug purposes
-    DH_1.d = q1;
-    DH_2.theta = -q2;
-    DH_3.theta = -q3;
-    DH_4.theta = q4;
-    DH_5.theta = q5;
-    DH_6.theta = q6;
+    IKSolution1[0].d = q1;
+    IKSolution1[1].theta = -q2;
+    IKSolution1[2].theta = -q3;
+    IKSolution1[3].theta = q4_1;
+    IKSolution1[4].theta = q5_1;
+    IKSolution1[5].theta = q6_1;
+
+    IKSolution2[0].d = q1;
+    IKSolution2[1].theta = -q2;
+    IKSolution2[2].theta = -q3;
+    IKSolution2[3].theta = q4_2;
+    IKSolution2[4].theta = q5_2;
+    IKSolution2[5].theta = q6_2;
 
     return true;
     

@@ -13,11 +13,6 @@ Simulator::Simulator() {
 	orbit = {M_PI_2, 0};
 
 	LoadModels();
-	wristTarget = {0, 0, 0};
-
-	buttonInput = 0;
-	currentMode = OPEN_LOOP;
-	prevMode = OPEN_LOOP;
 
 	Reset();
 }
@@ -36,21 +31,12 @@ void Simulator::Draw()
 	BeginMode3D(camera);
 
 	DrawArm(angles);
-	if (currentMode == INVERSE_KINEMATICS) {
-		// GripperModel.transform =
-		// MatrixRotateXYZ({
-		// 	targetAngles.J4*(float)M_PI/180,
-		// 	targetAngles.J5*(float)M_PI/180,
-		// 	targetAngles.J6*(float)M_PI/180})
-		// * MatrixTranslate(wristTarget.x, wristTarget.y, wristTarget.z);
-		// DrawModel(GripperModel, {0}, 1, DARKBLUE);
+	if (arm.getCurrentMode() == ControlMode::IK_POSE || arm.getCurrentMode() == ControlMode::IK_WRIST) {
 		rlDisableDepthTest();
-		DrawDHLinks();
+		DrawDHLinks(IK::IKSolution1, LIME);
+		DrawDHLinks(IK::IKSolution2, YELLOW);
 		rlEnableDepthTest();
-	}
-
-	if (currentMode == INVERSE_KINEMATICS) {
-		DrawSphere({wristTarget.x, wristTarget.y, wristTarget.z}, 0.5, YELLOW);
+		DrawSphere({arm.getTarget().x, arm.getTarget().y, arm.getTarget().z}, 0.5, YELLOW);
 	}
 
 	DrawCube({0, 0, 0}, 1, 1, 1, LIGHTGRAY);
@@ -64,12 +50,15 @@ void Simulator::Draw()
 	DrawText("Arm Simulation", 5,5,20,BLACK);
 	DrawText("CM: ", 5,700,20,BLACK);
 
-	if (currentMode == OPEN_LOOP) DrawText("O", 150,700,20,BLACK);
-	else if (currentMode == CLOSED_LOOP) DrawText("C", 150,700,20,BLACK);
-	else DrawText("IK", 150,700,20,BLACK);
+	switch (arm.getCurrentMode()) {
+		case ControlMode::OPEN_LOOP: DrawText("O", 150,700,20,BLACK); break;
+		case ControlMode::CLOSED_LOOP: DrawText("C", 150,700,20,BLACK); break;
+		case ControlMode::IK_POSE: DrawText("POSE", 150,700,20,BLACK); break;
+		case ControlMode::IK_WRIST: DrawText("WRIST", 150,700,20,BLACK); break;
+	}
 
 	DrawText("Joint Target:", 5,650,20,BLACK);
-	DrawText(TextFormat("X:%.2f Y:%.2f Z:%.2f", wristTarget.x, wristTarget.y, wristTarget.z), 250,650,20,BLACK);
+	DrawText(TextFormat("X:%.2f Y:%.2f Z:%.2f", arm.getTarget().x, arm.getTarget().y, arm.getTarget().z), 250,650,20,BLACK);
 	DrawText("Joint Angles:", 5,670,20, BLACK);
 	DrawText(TextFormat("X:%04.2f J2:%04.2f J3:%04.2f J4:%04.2f J5:%04.2f J6:%04.2f", angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6), 250,670,20,BLACK);
 
@@ -98,25 +87,25 @@ void Simulator::DrawArm(const JointPositions &angles) {
 }
 
 
-void Simulator::DrawDHLinks() {
+void Simulator::DrawDHLinks(const IK::DHParameters links[6], Color linkColor) {
 
 	// EVIL CODE
 
 	TransfMatrix forward = Identity(); // initial frame
 
 	// Draw first joint manually
-	TransfMatrix firstJoint = forward * Translation(0, 0, IK::DHTable[0].d);
+	TransfMatrix firstJoint = forward * Translation(0, 0, links[0].d);
 	Vector firstPos = firstJoint * Vector{0, 0, 0};
 	Vector zPlus = firstJoint * Vector{0, 0, 3};
 	Vector xPlus = firstJoint * Vector{3, 0, 0};
-	DrawCube({firstPos.x, firstPos.y, firstPos.z}, 2, 2, 2, LIGHTGRAY);
+	DrawCube({firstPos.x, firstPos.y, firstPos.z}, 2, 2, 2, linkColor);
 	DrawLine3D({firstPos.x, firstPos.y, firstPos.z}, {zPlus.x, zPlus.y, zPlus.z}, BLUE);
 	DrawLine3D({firstPos.x, firstPos.y, firstPos.z}, {xPlus.x, xPlus.y, xPlus.z}, RED);
 	
 	Vector prev = firstPos;
 
-	for (const auto &link : IK::DHTable) {
-		forward = forward * IK::TransformFromDH(link);
+	for (int i = 0; i < 6; i++) {
+		forward = forward * IK::TransformFromDH(links[i]);
 		Vector curr = forward * Vector{0, 0, 0};
 		Vector start = forward * Vector{0, 0, 1};
 		Vector end = forward * Vector{0, 0, -1};
@@ -126,7 +115,7 @@ void Simulator::DrawDHLinks() {
 		DrawCylinderEx(
 			{start.x, start.y, start.z},
 			{end.x, end.y, end.z},
-			1, 1, 10, LIGHTGRAY);
+			1, 1, 10, linkColor);
 		DrawLine3D({curr.x, curr.y, curr.z}, {zPlus.x, zPlus.y, zPlus.z}, BLUE);
 		DrawLine3D({curr.x, curr.y, curr.z}, {xPlus.x, xPlus.y, xPlus.z}, RED);
 		prev = curr;
@@ -202,8 +191,9 @@ void Simulator::ProcessInput()
 }
 
 void Simulator::Update(float delta) 
-{	
-	if (currentMode == OPEN_LOOP) {
+{
+	switch (arm.getCurrentMode()) {
+	case ControlMode::OPEN_LOOP:
 		arm.driveOpenLoop(
 			axes[RIGHT_STICK_X] * OPEN_LOOP_DUTY,
 			axes[RIGHT_STICK_Y] * OPEN_LOOP_DUTY,
@@ -212,25 +202,8 @@ void Simulator::Update(float delta)
 			axes[TRIGGERS] * OPEN_LOOP_DUTY,
 			axes[BUMPERS] * OPEN_LOOP_DUTY
 		);
-	} else if (currentMode == INVERSE_KINEMATICS) {
-		wristTarget.x += axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta;
-		wristTarget.y += axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta;
-		wristTarget.z += axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta;
-		TransfMatrix targetPose = 
-		Translation(0, 0, wristTarget.z)
-		* Translation(0, wristTarget.y, 0)
-		* Translation(wristTarget.x, 0, 0);
-		wristRotation = Rotation(0, axes[LEFT_STICK_X] * LOCKMODE_ANGULAR_SPEED * delta, 0) * wristRotation;
-		wristRotation = Rotation(0, 0, axes[TRIGGERS] * LOCKMODE_ANGULAR_SPEED * delta) * wristRotation;
-		wristRotation = Rotation(axes[BUMPERS] * LOCKMODE_ANGULAR_SPEED * delta, 0, 0) * wristRotation;
-		targetPose = targetPose * wristRotation;
-		arm.driveInverseKinematics(
-			targetPose
-		);
-
-		
-	} else if (currentMode == CLOSED_LOOP) {
-		// std::cout << (axes[RIGHT_STICK_Y] * CLOSED_LOOP_ANGULAR_SPEED * delta) << std::endl;
+		break;
+	case ControlMode::CLOSED_LOOP:
 		arm.incrementTargetAngles(
 			axes[RIGHT_STICK_X] * CLOSED_LOOP_LINEAR_SPEED * delta,
 			axes[RIGHT_STICK_Y] * CLOSED_LOOP_ANGULAR_SPEED * delta,
@@ -239,32 +212,53 @@ void Simulator::Update(float delta)
 			axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta,
 			axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta
 		);
+		break;
+	case ControlMode::IK_POSE:
+		arm.incrementInverseKinematicsPose(
+			axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta,
+			axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta,
+			axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta,
+			axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+			axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+			axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta
+		);
+		break;
+	case ControlMode::IK_WRIST:
+		arm.incrementInverseKinematicsPosition(
+			axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta,
+			axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta,
+			axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta,
+			axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+			axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+			axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta
+		);
+		break;
 	}
 	arm.update(delta);
 }
 
 void Simulator::Reset() {
-	wristTarget.x = FOREARM_LENGTH + WRIST_LENGTH + GRIPPER_LENGTH;
-	wristTarget.y = SHOULDER_LENGTH + BICEP_LENGTH + FOREARM_ROLL_LENGTH;
-	wristTarget.z = 6.33;
-	// wristRotation.x = 0;
-	// wristRotation.y = 90;
-	// wristRotation.z = 0;
-	wristRotation = Rotation(0, M_PI_2, 0);
+	// wristTarget.x = FOREARM_LENGTH + WRIST_LENGTH + GRIPPER_LENGTH;
+	// wristTarget.y = SHOULDER_LENGTH + BICEP_LENGTH + FOREARM_ROLL_LENGTH;
+	// wristTarget.z = 6.33;
+	// wristRotation = Rotation(0, M_PI_2, 0);
 
 	arm.driveTargetAngles(0, 0, 0, 0, 0, 0);
 } 
 
 void Simulator::ToggleModes() {
-	if (currentMode == OPEN_LOOP) {
-		currentMode = CLOSED_LOOP;
-		JointPositions angles = arm.getJointPositions();
-		arm.driveTargetAngles(angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6);
-		// targetAngles = arm.getJointPositions();
-	} else if (currentMode == CLOSED_LOOP) {
-		currentMode = INVERSE_KINEMATICS;
-		wristTarget = arm.getGripperCoordinates();
-	} else {
-		currentMode = OPEN_LOOP;
+	switch (arm.getCurrentMode()) {
+	case ControlMode::OPEN_LOOP:
+		arm.incrementTargetAngles(0, 0, 0, 0, 0, 0);
+		break;
+	case ControlMode::CLOSED_LOOP:
+		arm.incrementInverseKinematicsPose(0, 0, 0, 0, 0, 0);
+		break;
+	case ControlMode::IK_POSE:
+		arm.incrementInverseKinematicsPosition(0, 0, 0, 0, 0, 0);
+		break;
+	case ControlMode::IK_WRIST:
+		arm.driveOpenLoop(0, 0, 0, 0, 0, 0);
+		break;
 	}
 }

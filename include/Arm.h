@@ -8,6 +8,13 @@
 #include "RoveMatrix.h"
 #include "Smoco.h"
 
+enum class ControlMode {
+    OPEN_LOOP,
+    CLOSED_LOOP,
+    IK_POSE,
+    IK_WRIST
+};
+
 class Arm {
 private:
     Smoco XMotor;
@@ -19,6 +26,11 @@ private:
     Smoco GripperMotor;
     int32_t J6Zero = 0;
 
+    ControlMode currentMode = ControlMode::OPEN_LOOP;
+    Vector gripperTarget = {0};
+    Vector j4j5j6Target = {0};
+    TransfMatrix wristRotation = Rotation(0, M_PI_2, 0);
+
 public:
     Arm();
     // Drive joints with given powers
@@ -27,8 +39,11 @@ public:
     void driveTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4Angle, float J5Angle, float J6Angle);
     // Increment joint targets
     void incrementTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4Angle, float J5Angle, float J6Angle);
-    // Drive joints such that J5 is centered at the given coordinate
-    // void driveInverseKinematics(float x, float y, float z, float J4Angle, float J5Angle, float J6Angle);
+    
+    void incrementInverseKinematicsPosition(float x, float y, float z, float j4, float j5, float j6);
+    
+    void incrementInverseKinematicsPose(float tx, float ty, float tz, float rx, float ry, float rz);
+
     void driveInverseKinematics(const TransfMatrix& targetPose);
     // Configure limits
     void limitSwitchOverride(uint16_t bitmask);
@@ -38,9 +53,11 @@ public:
 
     JointPositions getJointPositions() const;
     Vector getGripperCoordinates() const;
-    uint16_t wouldViolateSoftLimits(const JointPositions &angles) const;
+    bool isPositionWithinLimits(const JointPositions& angles);
     // void holdCurrentPosition();
 
+    ControlMode getCurrentMode() const { return currentMode; }
+    Vector getTarget() const { return gripperTarget; }
 
 private:
     // Use GJK to detect and resolve collisions

@@ -21,6 +21,9 @@ struct TransfMatrix {
         };
         float values[4][4];
     };
+
+    TransfMatrix getRotation() const;
+    Vector getTranslation() const;
 };
 
 TransfMatrix Transpose(const TransfMatrix& mat);
