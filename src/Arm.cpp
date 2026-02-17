@@ -2,18 +2,6 @@
 
 #include <iostream>
 
-// static ACAN_T4 canChannel = ACAN_T4({125000});
-
-// // DH Parameters, all distances in inches, all rotations in radians
-// IK::DHParameters ArmParameters[6] = {
-//     { M_PI_2, 0 /*q1*/, 0, SHOULDER_LENGTH },
-//     { 0 /*-q2*/, 0, 0, BICEP_LENGTH },
-//     { 0 /*-q3*/, 0, M_PI_2, FOREARM_ROLL_LENGTH },
-//     { 0 /*q4*/, FOREARM_LENGTH, -M_PI_2, 0},
-//     { 0 /*q5*/, 0, M_PI_2, 0},
-//     { 0 /*q6*/, WRIST_LENGTH + GRIPPER_LENGTH, 0, 0 }
-// };
-
 Arm::Arm() :
     XMotor(degToEnc(6.33, 0, X_ENC_PER_IN), 0.5 * X_ENC_PER_IN),
     J2Motor(degToEnc(60, J2_ZERO, J2_ENC_PER_DEG), 20 * J2_ENC_PER_DEG),
@@ -101,9 +89,9 @@ void Arm::incrementInverseKinematicsPosition(float x, float y, float z, float j4
         JointPositions levelAngles = getJointPositions();
         // wrist center
         TransfMatrix currentPose = IK::CalculateForwardTransform(levelAngles);
-        Vector wristCoords = currentPose.getTranslation() - currentPose.getRotation() * Vector{0, 0, WRIST_LENGTH+GRIPPER_LENGTH};
+        Vector wristCoords = currentPose.getTranslation() - currentPose.getRotation() * ((WRIST_LENGTH+GRIPPER_LENGTH)*BASIS_Z);
         // gripper center
-        gripperTarget = wristCoords + Vector{WRIST_LENGTH+GRIPPER_LENGTH, 0, 0};
+        gripperTarget = wristCoords + (WRIST_LENGTH+GRIPPER_LENGTH)*BASIS_X;
         // compute what the angles would be
         IK::CalculateInverseKinematics(Translation(gripperTarget.x, gripperTarget.y, gripperTarget.z)*Rotation(0, M_PI_2, 0), levelAngles);
         // compute what the angles should be
@@ -233,8 +221,5 @@ JointPositions Arm::getJointPositions() const {
 
 Vector Arm::getGripperCoordinates() const {
     JointPositions angles = getJointPositions();
-    return
-    // Rotation(0, -M_PI_2, 0) // Initial frame
-    IK::CalculateForwardTransform(angles)
-    * Vector{0, 0, 0};
+    return IK::CalculateForwardTransform(angles) * ORIGIN;
 }

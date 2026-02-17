@@ -25,6 +25,7 @@ Simulator::~Simulator() {
 void Simulator::Draw() 
 {
 	JointPositions angles = arm.getJointPositions();
+	Vector armTarget = arm.getTarget();
 
 	ClearBackground(WHITE);
 	BeginDrawing();
@@ -33,10 +34,9 @@ void Simulator::Draw()
 	DrawArm(angles);
 	if (arm.getCurrentMode() == ControlMode::IK_POSE || arm.getCurrentMode() == ControlMode::IK_WRIST) {
 		rlDisableDepthTest();
-		DrawDHLinks(IK::IKSolution1, LIME);
-		DrawDHLinks(IK::IKSolution2, YELLOW);
+		DrawDHLinks(IK::DHTable);
 		rlEnableDepthTest();
-		DrawSphere({arm.getTarget().x, arm.getTarget().y, arm.getTarget().z}, 0.5, YELLOW);
+		DrawSphere({armTarget.x, armTarget.y, armTarget.z}, 0.5, YELLOW);
 	}
 
 	DrawCube({0, 0, 0}, 1, 1, 1, LIGHTGRAY);
@@ -47,20 +47,26 @@ void Simulator::Draw()
 
 	EndMode3D();
 
-	DrawText("Arm Simulation", 5,5,20,BLACK);
-	DrawText("CM: ", 5,700,20,BLACK);
+	DrawText("Arm Simulation", 5, 5, 20, BLACK);
+	DrawText("CM: ", 5, 700, 20, BLACK);
 
 	switch (arm.getCurrentMode()) {
-		case ControlMode::OPEN_LOOP: DrawText("O", 150,700,20,BLACK); break;
-		case ControlMode::CLOSED_LOOP: DrawText("C", 150,700,20,BLACK); break;
-		case ControlMode::IK_POSE: DrawText("POSE", 150,700,20,BLACK); break;
-		case ControlMode::IK_WRIST: DrawText("WRIST", 150,700,20,BLACK); break;
+		case ControlMode::OPEN_LOOP: DrawText("O", 150, 700, 20, BLACK); break;
+		case ControlMode::CLOSED_LOOP: DrawText("C", 150, 700, 20, BLACK); break;
+		case ControlMode::IK_POSE: DrawText("POSE", 150, 700, 20, BLACK); break;
+		case ControlMode::IK_WRIST: DrawText("WRIST", 150, 700, 20, BLACK); break;
 	}
 
-	DrawText("Joint Target:", 5,650,20,BLACK);
-	DrawText(TextFormat("X:%.2f Y:%.2f Z:%.2f", arm.getTarget().x, arm.getTarget().y, arm.getTarget().z), 250,650,20,BLACK);
-	DrawText("Joint Angles:", 5,670,20, BLACK);
-	DrawText(TextFormat("X:%04.2f J2:%04.2f J3:%04.2f J4:%04.2f J5:%04.2f J6:%04.2f", angles.X, angles.J2, angles.J3, angles.J4, angles.J5, angles.J6), 250,670,20,BLACK);
+	DrawText("Joint Target:", 5, 650, 20,BLACK);
+	DrawText(TextFormat("X:%.2f Y:%.2f Z:%.2f", armTarget.x, armTarget.y, armTarget.z), 250, 650, 20, BLACK);
+	DrawText("Joint Angles:", 5, 670, 20, BLACK);
+	int offset = 0;
+	DrawText(TextFormat("X:%04.2f", angles.X), 250 + 110*offset++, 670, 20, BLACK);
+	DrawText(TextFormat("J2:%04.2f", angles.J2), 250 + 110*offset++, 670, 20, BLACK);
+	DrawText(TextFormat("J3:%04.2f", angles.J3), 250 + 110*offset++, 670, 20, BLACK);
+	DrawText(TextFormat("J4:%04.2f", angles.J4), 250 + 110*offset++, 670, 20, BLACK);
+	DrawText(TextFormat("J5:%04.2f", angles.J5), 250 + 110*offset++, 670, 20, BLACK);
+	DrawText(TextFormat("J6:%04.2f", angles.J6), 250 + 110*offset++, 670, 20, BLACK);
 
 	EndDrawing();
 }
@@ -95,9 +101,9 @@ void Simulator::DrawDHLinks(const IK::DHParameters links[6], Color linkColor) {
 
 	// Draw first joint manually
 	TransfMatrix firstJoint = forward * Translation(0, 0, links[0].d);
-	Vector firstPos = firstJoint * Vector{0, 0, 0};
-	Vector zPlus = firstJoint * Vector{0, 0, 3};
-	Vector xPlus = firstJoint * Vector{3, 0, 0};
+	Vector firstPos = firstJoint * ORIGIN;
+	Vector zPlus = firstJoint * (3*BASIS_Z);
+	Vector xPlus = firstJoint * (3*BASIS_X);
 	DrawCube({firstPos.x, firstPos.y, firstPos.z}, 2, 2, 2, linkColor);
 	DrawLine3D({firstPos.x, firstPos.y, firstPos.z}, {zPlus.x, zPlus.y, zPlus.z}, BLUE);
 	DrawLine3D({firstPos.x, firstPos.y, firstPos.z}, {xPlus.x, xPlus.y, xPlus.z}, RED);
@@ -106,11 +112,11 @@ void Simulator::DrawDHLinks(const IK::DHParameters links[6], Color linkColor) {
 
 	for (int i = 0; i < 6; i++) {
 		forward = forward * IK::TransformFromDH(links[i]);
-		Vector curr = forward * Vector{0, 0, 0};
-		Vector start = forward * Vector{0, 0, 1};
-		Vector end = forward * Vector{0, 0, -1};
-		zPlus = forward * Vector{0, 0, 3};
-		xPlus = forward * Vector{3, 0, 0};
+		Vector curr = forward * ORIGIN;
+		Vector start = forward * BASIS_X;
+		Vector end = forward * -BASIS_X;
+		zPlus = forward * (3 * BASIS_Z);
+		xPlus = forward * (3 * BASIS_X);
 		DrawLine3D({prev.x, prev.y, prev.z}, {curr.x, curr.y, curr.z}, BLACK);
 		DrawCylinderEx(
 			{start.x, start.y, start.z},
@@ -238,11 +244,6 @@ void Simulator::Update(float delta)
 }
 
 void Simulator::Reset() {
-	// wristTarget.x = FOREARM_LENGTH + WRIST_LENGTH + GRIPPER_LENGTH;
-	// wristTarget.y = SHOULDER_LENGTH + BICEP_LENGTH + FOREARM_ROLL_LENGTH;
-	// wristTarget.z = 6.33;
-	// wristRotation = Rotation(0, M_PI_2, 0);
-
 	arm.driveTargetAngles(0, 0, 0, 0, 0, 0);
 } 
 
