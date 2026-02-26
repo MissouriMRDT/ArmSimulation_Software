@@ -1,11 +1,11 @@
 #ifndef SIMULATOR_H
 #define SIMULATOR_H
 
-#include <math.h>
 #include <raylib.h>
 #include <resource_dir.h>
 
 #include "ArmParameters.h"
+#include "InverseKinematics.h"
 #include "RoveMatrix.h"
 #include "Arm.h"
 
@@ -13,6 +13,7 @@
 #define CLOSED_LOOP_ANGULAR_SPEED 10.0f // degrees per second
 #define CLOSED_LOOP_LINEAR_SPEED 0.5f // inches per second
 #define IK_TARGET_SPEED 1.0f // inches per second
+#define CONTROLLER_DEAD_ZONE 0.35f
 
 enum AxesNames {
     LEFT_STICK_X = 0,
@@ -61,7 +62,8 @@ class Simulator {
     
     private:
         void DrawArm(const JointPositions &angles);
-        void DrawDHLinks(const IK::DHParameters links[6], Color linkColor = LIGHTGRAY);
+        void DrawDHLinks(const IK::DHParameters links[6], Color linkColor = LIGHTGRAY, const TransfMatrix &transform = Identity());
+        void DrawDHTable(const IK::DHParameters links[6], int x, int y, int width, int height);
 };
 
 #endif /*SIMULATOR_H*/

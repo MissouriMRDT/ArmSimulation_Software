@@ -5,7 +5,7 @@
 
 Simulator::Simulator() {
 	SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI);
-	InitWindow(1280, 720, "ArmSimulation");
+	InitWindow(1280, 720, "Arm Simulator v2.0");
 	SetTargetFPS(60);
 
 	camera.fovy = 70.0f;
@@ -35,10 +35,11 @@ void Simulator::Draw()
 	if (arm.getCurrentMode() == ControlMode::IK_POSE || arm.getCurrentMode() == ControlMode::IK_WRIST) {
 		rlDisableDepthTest();
 		DrawDHLinks(IK::DHTable);
+		DrawDHLinks(IK::DHTable, GREEN, Translation(6, 0, 24));
 		rlEnableDepthTest();
 		DrawSphere({armTarget.x, armTarget.y, armTarget.z}, 0.5, YELLOW);
 	}
-
+	
 	DrawCube({0, 0, 0}, 1, 1, 1, LIGHTGRAY);
 	DrawCube({1, 0, 0}, 0.2, 0.2, 0.2, RED);
 	DrawCube({0, 1, 0}, 0.2, 0.2, 0.2, BLUE);
@@ -46,8 +47,8 @@ void Simulator::Draw()
 	DrawGrid(100, 10.0f);
 
 	EndMode3D();
-
-	DrawText("Arm Simulation", 5, 5, 20, BLACK);
+	
+	DrawText("Athena Arm Simulator", 5, 5, 20, BLACK);
 	DrawText("CM: ", 5, 700, 20, BLACK);
 
 	switch (arm.getCurrentMode()) {
@@ -56,7 +57,7 @@ void Simulator::Draw()
 		case ControlMode::IK_POSE: DrawText("POSE", 150, 700, 20, BLACK); break;
 		case ControlMode::IK_WRIST: DrawText("WRIST", 150, 700, 20, BLACK); break;
 	}
-
+	
 	DrawText("Joint Target:", 5, 650, 20,BLACK);
 	DrawText(TextFormat("X:%.2f Y:%.2f Z:%.2f", armTarget.x, armTarget.y, armTarget.z), 250, 650, 20, BLACK);
 	DrawText("Joint Angles:", 5, 670, 20, BLACK);
@@ -67,6 +68,10 @@ void Simulator::Draw()
 	DrawText(TextFormat("J4:%04.2f", angles.J4), 250 + 110*offset++, 670, 20, BLACK);
 	DrawText(TextFormat("J5:%04.2f", angles.J5), 250 + 110*offset++, 670, 20, BLACK);
 	DrawText(TextFormat("J6:%04.2f", angles.J6), 250 + 110*offset++, 670, 20, BLACK);
+	
+	if (arm.getCurrentMode() == ControlMode::IK_POSE || arm.getCurrentMode() == ControlMode::IK_WRIST) {
+		DrawDHTable(IK::DHTable, 800, 100, 500, 400);
+	}
 
 	EndDrawing();
 }
@@ -93,11 +98,11 @@ void Simulator::DrawArm(const JointPositions &angles) {
 }
 
 
-void Simulator::DrawDHLinks(const IK::DHParameters links[6], Color linkColor) {
+void Simulator::DrawDHLinks(const IK::DHParameters links[6], Color linkColor, const TransfMatrix &transform) {
 
 	// EVIL CODE
 
-	TransfMatrix forward = Identity(); // initial frame
+	TransfMatrix forward = transform; // initial frame
 
 	// Draw first joint manually
 	TransfMatrix firstJoint = forward * Translation(0, 0, links[0].d);
@@ -128,6 +133,21 @@ void Simulator::DrawDHLinks(const IK::DHParameters links[6], Color linkColor) {
 	}
 }
 
+void Simulator::DrawDHTable(const IK::DHParameters links[6], int x, int y, int width, int height) {
+	int lineSpacing = height/6;
+	int itemSpacing = width/4;
+	DrawText("DH Frame Table", x, y-50, 28, BLACK);
+	for (int i = 0; i < 6; i++) {
+		DrawLine(x, y + lineSpacing * i, x + width, y + lineSpacing * i, BLACK);
+		int textPos = y + lineSpacing * (i+1) - 50;
+		DrawText(TextFormat("d%d: %04.2f", i+1, links[i].d), x + itemSpacing*0, textPos, 20, BLACK);
+		DrawText(TextFormat("theta%d: %04.2f", i+1, links[i].theta), x + int(itemSpacing*0.75), textPos, 20, BLACK);
+		DrawText(TextFormat("a%d: %04.2f", i+1, links[i].a), x + itemSpacing*2, textPos, 20, BLACK);
+		DrawText(TextFormat("alpha%d: %04.2f", i+1, links[i].alpha), x + int(itemSpacing*2.75), textPos, 20, BLACK);
+	}
+	DrawLine(x, y + lineSpacing * 6, x + width, y + lineSpacing * 6, BLACK);
+}
+
 void Simulator::LoadModels() {
 	SearchAndSetResourceDir("resources");
 	XAxisModel = LoadModel("Athena/XAxis.obj");
@@ -150,6 +170,10 @@ void Simulator::UnloadModels()
 	UnloadModel(GripperModel);
 }
 
+float removeDeadZone(float axis, float deadZone) {
+	return abs(axis) > deadZone ? axis : 0;
+}
+
 void Simulator::ProcessInput() 
 {
 	if (IsCursorHidden()) {
@@ -164,10 +188,10 @@ void Simulator::ProcessInput()
 	
 
 	if (IsGamepadAvailable(0)) {
-		axes[LEFT_STICK_X] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_X);
-		axes[LEFT_STICK_Y] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_Y);
-		axes[RIGHT_STICK_X] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_X);
-		axes[RIGHT_STICK_Y] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_Y);
+		axes[LEFT_STICK_X] = removeDeadZone(GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_X), CONTROLLER_DEAD_ZONE);
+		axes[LEFT_STICK_Y] = removeDeadZone(GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_Y), CONTROLLER_DEAD_ZONE);
+		axes[RIGHT_STICK_X] = removeDeadZone(GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_X), CONTROLLER_DEAD_ZONE);
+		axes[RIGHT_STICK_Y] = removeDeadZone(GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_Y), CONTROLLER_DEAD_ZONE);
 		axes[BUMPERS] = IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1) - IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1);
 		axes[TRIGGERS] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_TRIGGER) - GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_TRIGGER);
 		axes[D_PAD_X] = IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_LEFT_FACE_RIGHT) - IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_LEFT_FACE_LEFT);

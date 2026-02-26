@@ -1,6 +1,7 @@
 #ifndef ROVE_MATRIX_H
 #define ROVE_MATRIX_H
 
+#define _USE_MATH_DEFINES
 #include <math.h>
 
 // Represents a column vector of [x, y, z, 1]
