@@ -3,6 +3,7 @@
 
 #include <raylib.h>
 #include <resource_dir.h>
+#include <list>
 
 #include "ArmParameters.h"
 #include "InverseKinematics.h"
@@ -32,6 +33,7 @@ enum AxesNames {
 class Simulator {
     private:
         float axes[AXES_COUNT];
+        bool useToolPose = false;
 
         int selectedGamepad = 0;
 
@@ -45,6 +47,10 @@ class Simulator {
         Model ForearmModel;
         Model WristModel;
         Model GripperModel;
+
+        static constexpr size_t HISTORY_BUFFER_SIZE = 1024;
+        std::list<Vector> targetHistory;
+        std::list<Vector> positionHistory;
 
         Arm arm;
 
@@ -62,6 +68,7 @@ class Simulator {
     
     private:
         void DrawArm(const JointPositions &angles);
+        void DrawHistoryBuffer(const std::list<Vector> &buffer, Color lineColor = BLACK);
         void DrawDHLinks(const IK::DHParameters links[6], Color linkColor = LIGHTGRAY, const TransfMatrix &transform = Identity());
         void DrawDHTable(const IK::DHParameters links[6], int x, int y, int width, int height);
 };

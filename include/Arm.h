@@ -26,13 +26,15 @@ private:
     Smoco GripperMotor;
     int32_t J6Zero = 0;
 
+    void setControlMode(ControlMode);
     ControlMode currentMode = ControlMode::OPEN_LOOP;
-    Vector gripperTarget = {0};
     Vector j4j5j6Target = {0};
+    Vector gripperTarget = {0};
     TransfMatrix wristRotation = Rotation(0, M_PI_2, 0);
 
 public:
     Arm();
+    void estop();
     // Drive joints with given powers
     void driveOpenLoop(int16_t XDuty, int16_t J2Duty, int16_t J3Duty, int16_t J4Duty, int16_t J5Duty, int16_t J6Duty);
     // Drive joints to target angles
@@ -42,7 +44,9 @@ public:
     
     void incrementInverseKinematicsPosition(float x, float y, float z, float j4, float j5, float j6);
     
-    void incrementInverseKinematicsPose(float tx, float ty, float tz, float rx, float ry, float rz);
+    void incrementInverseKinematicsToolPose(float tx, float ty, float tz, float rx, float ry, float rz);
+
+    void incrementInverseKinematicsWorldPose(float tx, float ty, float tz, float rx, float ry, float rz);
 
     void driveInverseKinematics(const TransfMatrix& targetPose);
     // Configure limits

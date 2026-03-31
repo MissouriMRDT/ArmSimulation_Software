@@ -35,10 +35,19 @@ void Simulator::Draw()
 	if (arm.getCurrentMode() == ControlMode::IK_POSE || arm.getCurrentMode() == ControlMode::IK_WRIST) {
 		rlDisableDepthTest();
 		DrawDHLinks(IK::DHTable);
-		DrawDHLinks(IK::DHTable, GREEN, Translation(6, 0, 24));
+		// DrawDHLinks(IK::DHTable, GREEN, Translation(6, 0, 24));
 		rlEnableDepthTest();
 		DrawSphere({armTarget.x, armTarget.y, armTarget.z}, 0.5, YELLOW);
+		targetHistory.push_back(armTarget);
+		if (targetHistory.size() >= HISTORY_BUFFER_SIZE) targetHistory.pop_front();
+		DrawHistoryBuffer(targetHistory, GREEN);
 	}
+
+	Vector gripperPos = arm.getGripperCoordinates();
+	DrawSphere({gripperPos.x, gripperPos.y, gripperPos.z}, 0.5, RED);
+	positionHistory.push_back(gripperPos);
+	if (positionHistory.size() >= HISTORY_BUFFER_SIZE) positionHistory.pop_front();
+	DrawHistoryBuffer(positionHistory, RED);
 	
 	DrawCube({0, 0, 0}, 1, 1, 1, LIGHTGRAY);
 	DrawCube({1, 0, 0}, 0.2, 0.2, 0.2, RED);
@@ -54,7 +63,9 @@ void Simulator::Draw()
 	switch (arm.getCurrentMode()) {
 		case ControlMode::OPEN_LOOP: DrawText("O", 150, 700, 20, BLACK); break;
 		case ControlMode::CLOSED_LOOP: DrawText("C", 150, 700, 20, BLACK); break;
-		case ControlMode::IK_POSE: DrawText("POSE", 150, 700, 20, BLACK); break;
+		case ControlMode::IK_POSE:
+			DrawText(TextFormat("POSE (%s)", useToolPose ? "TOOL" : "WORLD"), 150, 700, 20, BLACK);
+			break;
 		case ControlMode::IK_WRIST: DrawText("WRIST", 150, 700, 20, BLACK); break;
 	}
 	
@@ -76,6 +87,13 @@ void Simulator::Draw()
 	EndDrawing();
 }
 
+void Simulator::DrawHistoryBuffer(const std::list<Vector> &buffer, Color lineColor) {
+	auto it2 = buffer.begin();
+	for (auto it1 = it2++; it2 != buffer.end(); ++it1, ++it2) {
+		DrawLine3D({it1->x, it1->y, it1->z}, {it2->x, it2->y, it2->z}, lineColor);
+	}
+}
+
 void Simulator::DrawArm(const JointPositions &angles) {
 	XAxisModel.transform = MatrixTranslate(-SHOULDER_OVERHANG, 0, 0);
 	ShoulderModel.transform = MatrixTranslate(0, 0, angles.X);
@@ -92,9 +110,6 @@ void Simulator::DrawArm(const JointPositions &angles) {
 	DrawModel(ForearmModel, {0, 0, 0}, 1.0f, PURPLE);
 	DrawModel(WristModel, {0, 0, 0}, 1.0f, GREEN);
 	DrawModel(GripperModel, {0, 0, 0}, 1.0f, MAROON);
-
-	Vector gripperPos = arm.getGripperCoordinates();
-	DrawSphere({gripperPos.x, gripperPos.y, gripperPos.z}, 0.5, RED);
 }
 
 
@@ -182,16 +197,17 @@ void Simulator::ProcessInput()
 	} else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
 		DisableCursor();
 	}
-	camera.position = {cos(orbit.x)*cos(orbit.y)*100, sin(orbit.y)*100 + 10, sin(orbit.x)*cos(orbit.y)*100};
+	camera.position = {-cos(orbit.x)*cos(orbit.y)*100, sin(orbit.y)*100 + 10, -sin(orbit.x)*cos(orbit.y)*100};
 	camera.target = {0, 10, 0};
 	camera.up = {0, 1, 0};
 	
 
 	if (IsGamepadAvailable(0)) {
+		// invert y axes because stick forward is negative for some reason
 		axes[LEFT_STICK_X] = removeDeadZone(GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_X), CONTROLLER_DEAD_ZONE);
-		axes[LEFT_STICK_Y] = removeDeadZone(GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_Y), CONTROLLER_DEAD_ZONE);
+		axes[LEFT_STICK_Y] = removeDeadZone(-GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_Y), CONTROLLER_DEAD_ZONE);
 		axes[RIGHT_STICK_X] = removeDeadZone(GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_X), CONTROLLER_DEAD_ZONE);
-		axes[RIGHT_STICK_Y] = removeDeadZone(GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_Y), CONTROLLER_DEAD_ZONE);
+		axes[RIGHT_STICK_Y] = removeDeadZone(-GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_Y), CONTROLLER_DEAD_ZONE);
 		axes[BUMPERS] = IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1) - IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1);
 		axes[TRIGGERS] = GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_TRIGGER) - GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_LEFT_TRIGGER);
 		axes[D_PAD_X] = IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_LEFT_FACE_RIGHT) - IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_LEFT_FACE_LEFT);
@@ -200,7 +216,7 @@ void Simulator::ProcessInput()
 		axes[RIGHT_BUMPER_TRIGGER] = IsGamepadButtonDown(selectedGamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1) - GetGamepadAxisMovement(selectedGamepad, GAMEPAD_AXIS_RIGHT_TRIGGER);
 
 		if (IsGamepadButtonPressed(selectedGamepad, GAMEPAD_BUTTON_MIDDLE_RIGHT)) ToggleModes();
-		if(IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE)) Reset();
+		if(IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_LEFT)) useToolPose = !useToolPose;
 
 	} else {
 		axes[LEFT_STICK_X] = IsKeyDown(KEY_D) - IsKeyDown(KEY_A);
@@ -215,9 +231,10 @@ void Simulator::ProcessInput()
 		axes[RIGHT_BUMPER_TRIGGER] = IsKeyDown(KEY_E) - IsKeyDown(KEY_Q);
 
 		if (IsKeyPressed(KEY_M)) ToggleModes();
-		if(IsKeyPressed(KEY_P)) Reset();
+		if (IsKeyPressed(KEY_T)) useToolPose = !useToolPose;
 	}
-
+	
+	if (IsKeyPressed(KEY_P)) Reset();
 }
 
 void Simulator::Update(float delta) 
@@ -244,20 +261,31 @@ void Simulator::Update(float delta)
 		);
 		break;
 	case ControlMode::IK_POSE:
-		arm.incrementInverseKinematicsPose(
-			axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta,
-			axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta,
-			axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta,
-			axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta,
-			axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta,
-			axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta
-		);
+		if (useToolPose) {
+			arm.incrementInverseKinematicsToolPose(
+				axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta,
+				axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta,
+				axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta,
+				axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+				axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+				axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta
+			);
+		} else {
+			arm.incrementInverseKinematicsWorldPose(
+				axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta,
+				axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta,
+				axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta,
+				axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+				axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta,
+				axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta
+			);
+		}
 		break;
 	case ControlMode::IK_WRIST:
 		arm.incrementInverseKinematicsPosition(
+			axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta,
 			axes[RIGHT_STICK_Y] * IK_TARGET_SPEED * delta,
 			axes[LEFT_STICK_Y] * IK_TARGET_SPEED * delta,
-			axes[RIGHT_STICK_X] * IK_TARGET_SPEED * delta,
 			axes[LEFT_STICK_X] * CLOSED_LOOP_ANGULAR_SPEED * delta,
 			axes[TRIGGERS] * CLOSED_LOOP_ANGULAR_SPEED * delta,
 			axes[BUMPERS] * CLOSED_LOOP_ANGULAR_SPEED * delta
@@ -277,7 +305,7 @@ void Simulator::ToggleModes() {
 		arm.incrementTargetAngles(0, 0, 0, 0, 0, 0);
 		break;
 	case ControlMode::CLOSED_LOOP:
-		arm.incrementInverseKinematicsPose(0, 0, 0, 0, 0, 0);
+		arm.incrementInverseKinematicsWorldPose(0, 0, 0, 0, 0, 0);
 		break;
 	case ControlMode::IK_POSE:
 		arm.incrementInverseKinematicsPosition(0, 0, 0, 0, 0, 0);
