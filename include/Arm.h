@@ -4,7 +4,6 @@
 #include <cstdint>
 
 #include "ArmParameters.h"
-#include "InverseKinematics.h"
 #include "RoveMatrix.h"
 #include "Smoco.h"
 
@@ -30,7 +29,7 @@ private:
     ControlMode currentMode = ControlMode::OPEN_LOOP;
     Vector j4j5j6Target = {0};
     Vector gripperTarget = {0};
-    TransfMatrix wristRotation = Rotation(0, M_PI_2, 0);
+    TransfMatrix wristRotation = Rotation(0, M_PI, 0);
 
 public:
     Arm();

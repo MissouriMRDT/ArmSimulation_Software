@@ -1,4 +1,6 @@
 #include "Simulator.h"
+#include "ArmParameters.h"
+#include "InverseKinematics.h"
 #include <raylib.h>
 #include <raymath.h>
 #include <rlgl.h>
@@ -95,8 +97,8 @@ void Simulator::DrawHistoryBuffer(const std::list<Vector> &buffer, Color lineCol
 }
 
 void Simulator::DrawArm(const JointPositions &angles) {
-	XAxisModel.transform = MatrixTranslate(-SHOULDER_OVERHANG, 0, 0);
-	ShoulderModel.transform = MatrixTranslate(0, 0, angles.X);
+	XAxisModel.transform = MatrixTranslate(-SHOULDER_OVERHANG, 0, 0) * MatrixRotateY(M_PI_2);
+	ShoulderModel.transform = MatrixTranslate(SHOULDER_OVERHANG, 0, angles.X) * XAxisModel.transform;
 	BicepModel.transform = MatrixRotateZ(angles.J2*DEG2RAD) * MatrixTranslate(0, SHOULDER_LENGTH, 0) * ShoulderModel.transform;
 	ForearmRollModel.transform = MatrixRotateZ(angles.J3*DEG2RAD) * MatrixTranslate(0, BICEP_LENGTH, 0) * BicepModel.transform;
 	ForearmModel.transform = MatrixRotateX(angles.J4*DEG2RAD) * MatrixTranslate(FOREARM_ROLL_PARTIAL_LENGTH, FOREARM_ROLL_LENGTH, 0) * ForearmRollModel.transform;
@@ -117,7 +119,7 @@ void Simulator::DrawDHLinks(const IK::DHParameters links[6], Color linkColor, co
 
 	// EVIL CODE
 
-	TransfMatrix forward = transform; // initial frame
+	TransfMatrix forward = IK::BASE_FRAME * transform; // initial frame
 
 	// Draw first joint manually
 	TransfMatrix firstJoint = forward * Translation(0, 0, links[0].d);
@@ -197,7 +199,7 @@ void Simulator::ProcessInput()
 	} else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
 		DisableCursor();
 	}
-	camera.position = {-cos(orbit.x)*cos(orbit.y)*100, sin(orbit.y)*100 + 10, -sin(orbit.x)*cos(orbit.y)*100};
+	camera.position = {-cosf(orbit.x)*cosf(orbit.y)*100, sinf(orbit.y)*100 + 10, -sinf(orbit.x)*cosf(orbit.y)*100};
 	camera.target = {0, 10, 0};
 	camera.up = {0, 1, 0};
 	
