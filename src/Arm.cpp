@@ -126,7 +126,7 @@ void Arm::incrementInverseKinematicsPosition(float x, float y, float z, float j4
     if (!isPositionWithinLimits(newAngles)) return;
 
     gripperTarget = targetPose.getTranslation();
-    wristRotation = targetPose.getRotation();
+    gripperRotation = targetPose.getRotation();
     j4j5j6Target.x += j4;
     j4j5j6Target.y += j5;
     j4j5j6Target.z += j6;
@@ -142,12 +142,17 @@ void Arm::incrementInverseKinematicsPosition(float x, float y, float z, float j4
 void Arm::incrementInverseKinematicsWorldPose(float tx, float ty, float tz, float rx, float ry, float rz) {
     setControlMode(ControlMode::IK_POSE);
 
+    float xSkew = fabs(gripperRotation.getBasisZ().x);
+    if (xSkew > 0.001 && xSkew < snappingThreshold && (tx || ty || tz) && !(rx || ry || rz)) {
+        snapTargetPoseToYZ();
+    }
+
     TransfMatrix targetPose = Translation(gripperTarget.x + tx, gripperTarget.y + ty, gripperTarget.z + tz)
     // incrementally rotate wrist in world space
     * Rotation(0, ry * M_PI / 180, 0) // rotate about Y (yaw)
     * Rotation(rx * M_PI / 180, 0, 0) // rotate about X (pitch)
     * Rotation(0, 0, rz * M_PI / 180) // rotate about Z (roll)
-    * wristRotation;
+    * gripperRotation;
 
     driveInverseKinematics(targetPose);
 }
@@ -155,14 +160,19 @@ void Arm::incrementInverseKinematicsWorldPose(float tx, float ty, float tz, floa
 void Arm::incrementInverseKinematicsToolPose(float tx, float ty, float tz, float rx, float ry, float rz) {
     setControlMode(ControlMode::IK_POSE);
 
-    TransfMatrix newWristRotation = wristRotation
+    float xSkew = fabs(gripperRotation.getBasisZ().x);
+    if (xSkew > 0.001 && xSkew < snappingThreshold && (tx || ty || tz) && !(rx || ry || rz)) {
+        snapTargetPoseToYZ();
+    }
+
+    TransfMatrix newGripperRotation = gripperRotation
     * Rotation(0, ry * M_PI / 180, 0) // rotate about Y (yaw)
     * Rotation(rx * M_PI / 180, 0, 0) // rotate about X (pitch)
     * Rotation(0, 0, rz * M_PI / 180); // rotate about Z (roll)
-    TransfMatrix targetPose = Translation(gripperTarget.x, gripperTarget.y, gripperTarget.z) * newWristRotation;
+    TransfMatrix targetPose = Translation(gripperTarget.x, gripperTarget.y, gripperTarget.z) * newGripperRotation;
     Vector newGripperTarget = targetPose * Vector{tx, ty, tz};
 
-    targetPose = Translation(newGripperTarget.x, newGripperTarget.y, newGripperTarget.z) * newWristRotation;
+    targetPose = Translation(newGripperTarget.x, newGripperTarget.y, newGripperTarget.z) * newGripperRotation;
 
     driveInverseKinematics(targetPose);
 }
@@ -173,13 +183,27 @@ void Arm::driveInverseKinematics(const TransfMatrix& targetPose) {
     if (!IK::CalculateInverseKinematics(targetPose, angles)) return;
     if (!isPositionWithinLimits(angles)) return;
     gripperTarget = targetPose.getTranslation();
-    wristRotation = targetPose.getRotation();
+    gripperRotation = targetPose.getRotation();
     XMotor.driveTargetAngle(angles.X, 0.05);
     J2Motor.driveTargetAngle(angles.J2, 0.05);
     J3Motor.driveTargetAngle(angles.J3, 0.05);
     J4Motor.driveTargetAngle(angles.J4, 0.05);
     J5Motor.driveTargetAngle(angles.J5, 0.05);
     J6Motor.driveTargetAngle(angles.J6, 0.05);
+}
+
+void Arm::snapTargetPoseToYZ() {
+    // Vector newBasisZ = Project(BASIS_Z, gripperRotation.getBasisZ());
+    Vector newBasisZ = gripperRotation.getBasisZ();
+    newBasisZ.x = 0; // project onto YZ plane
+    Vector newBasisX = Cross(gripperRotation.getBasisY(), newBasisZ);
+    Vector newBasisY = Cross(newBasisZ, newBasisX);
+    gripperRotation = FromBasis(Normalize(newBasisX), Normalize(newBasisY), Normalize(newBasisZ));
+    std::cout << "Snapped poze to YZ plane." << std::endl;
+}
+
+void Arm::setYZSnappingThreshold(float threshold) {
+    snappingThreshold = threshold;
 }
 
 void Arm::limitSwitchOverride(uint16_t bitmask) {
@@ -261,7 +285,7 @@ void Arm::setControlMode(ControlMode newMode) {
         case ControlMode::IK_POSE: {
             TransfMatrix currentPose = IK::CalculateForwardTransform(getJointPositions());
             gripperTarget = currentPose.getTranslation();
-            wristRotation = currentPose.getRotation();
+            gripperRotation = currentPose.getRotation();
             std::cout << "SETTING TO POSE CONTROL" << std::endl;
             break;
         }

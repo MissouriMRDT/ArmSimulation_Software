@@ -34,6 +34,7 @@ class Simulator {
     private:
         float axes[AXES_COUNT];
         bool useToolPose = false;
+        bool snappingEnabled = true;
 
         int selectedGamepad = 0;
 

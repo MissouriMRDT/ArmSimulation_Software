@@ -66,7 +66,7 @@ void Simulator::Draw()
 		case ControlMode::OPEN_LOOP: DrawText("O", 150, 700, 20, BLACK); break;
 		case ControlMode::CLOSED_LOOP: DrawText("C", 150, 700, 20, BLACK); break;
 		case ControlMode::IK_POSE:
-			DrawText(TextFormat("POSE (%s)", useToolPose ? "TOOL" : "WORLD"), 150, 700, 20, BLACK);
+			DrawText(TextFormat("POSE (%s, %s)", useToolPose ? "TOOL" : "WORLD", snappingEnabled ? "SNAP" : "NOSNAP"), 150, 700, 20, BLACK);
 			break;
 		case ControlMode::IK_WRIST: DrawText("WRIST", 150, 700, 20, BLACK); break;
 	}
@@ -234,6 +234,10 @@ void Simulator::ProcessInput()
 
 		if (IsKeyPressed(KEY_M)) ToggleModes();
 		if (IsKeyPressed(KEY_T)) useToolPose = !useToolPose;
+		if (IsKeyPressed(KEY_Z)) {
+			snappingEnabled = !snappingEnabled;
+			arm.setYZSnappingThreshold(snappingEnabled ? 0.15 : 0);
+		}
 	}
 	
 	if (IsKeyPressed(KEY_P)) Reset();

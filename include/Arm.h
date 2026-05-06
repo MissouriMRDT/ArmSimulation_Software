@@ -29,7 +29,8 @@ private:
     ControlMode currentMode = ControlMode::OPEN_LOOP;
     Vector j4j5j6Target = {0};
     Vector gripperTarget = {0};
-    TransfMatrix wristRotation = Rotation(0, M_PI, 0);
+    TransfMatrix gripperRotation = Rotation(0, M_PI, 0);
+    float snappingThreshold = 0.15; // set to 0 to disable
 
 public:
     Arm();
@@ -40,14 +41,19 @@ public:
     void driveTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4Angle, float J5Angle, float J6Angle);
     // Increment joint targets
     void incrementTargetAngles(float XAngle, float J2Angle, float J3Angle, float J4Angle, float J5Angle, float J6Angle);
-    
+
     void incrementInverseKinematicsPosition(float x, float y, float z, float j4, float j5, float j6);
-    
+
     void incrementInverseKinematicsToolPose(float tx, float ty, float tz, float rx, float ry, float rz);
 
     void incrementInverseKinematicsWorldPose(float tx, float ty, float tz, float rx, float ry, float rz);
 
     void driveInverseKinematics(const TransfMatrix& targetPose);
+
+    void snapTargetPoseToYZ();
+
+    void setYZSnappingThreshold(float threshold);
+
     // Configure limits
     void limitSwitchOverride(uint16_t bitmask);
     void softLimitOverride(uint16_t bitmask);
